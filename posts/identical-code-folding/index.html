@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>Identical Code Folding</title>
+
+		<link rel="stylesheet" href="/css/style.css">
+
+		</head>
+	<body>
+		<nav class="header">
+			<div class="header-container">
+				<a href="/">
+					<h2>Dangerous Assembly</h2>
+				</a>
+				
+			</div>
+		</nav>
+
+		<div id="content">
+
+<main>
+	<article>
+		<header>
+        	<time datetime="2019-01-07 09:51:00 &#43;0100 CET" class="catalogue-time">2019-01-07</time>
+			<h1>Identical Code Folding</h1>
+			<div class="post-line"></div>
+		</header>
+		<aside>
+			<details>
+				<summary>Contents</summary><nav id="TableOfContents">
+<ul>
+<li><a href="#weak-symbols">Weak Symbols</a></li>
+<li><a href="#consolidating-independent-member-functions">Consolidating Independent Member Functions</a></li>
+<li><a href="#consolidating-identical-instances">Consolidating Identical Instances</a></li>
+<li><a href="#conclusion">Conclusion</a></li>
+</ul>
+</nav>
+			</details>
+		</aside>
+		
+
+<p>Even more interesting than removing unused functions is consolidating identical instances of templated functions.
+For each template parameter, the compiler generates a new instance.
+In case of templated classes, we generate code per template parameter for every member function.
+The instances can have identical code, e.g., the member function is independent of the template parameters or the types are semantically equivalent for the applied operations.
+Let&rsquo;s see if we can minimize the code explosion by deduplicating code when it is identical.</p>
+
+<h1 id="weak-symbols">Weak Symbols</h1>
+
+<p>When a template is instantiated with the same parameters in different .cpp-files, the compiler generates a function with a weak symbol in each object file.
+In contrast to other symbols, there can be multiple weak symbols with the exact same name.
+The linker assumes that all weak symbols with the same name have identical code.
+Therefore, it just picks the first one it encounters when searching for the symbol and copies the code only once into the executable.</p>
+
+<p>Normally, this works like a charm, but it can lead to subtle bugs when templates with the same name (in the same namespace and with the same template parameters) have different implementations.
+To make this more clear, let us take a small detour and look at the following example consisting of three source files.</p>
+
+<p>first.cpp:
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-C++" data-lang="C++"><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;cstdio&gt;</span><span style="color:#75715e">
+</span><span style="color:#75715e"></span>
+<span style="color:#66d9ef">template</span><span style="color:#f92672">&lt;</span><span style="color:#66d9ef">int</span><span style="color:#f92672">&gt;</span>
+<span style="color:#66d9ef">void</span> test(){
+	puts(<span style="color:#e6db74">&#34;test in first.cpp called&#34;</span>); <span style="color:#75715e">// templated function varies, but has the same name
+</span><span style="color:#75715e"></span>}
+
+<span style="color:#66d9ef">void</span> foo_first(){
+	test<span style="color:#f92672">&lt;</span><span style="color:#ae81ff">0</span><span style="color:#f92672">&gt;</span>(); <span style="color:#75715e">// generate instance, weak symbol with the same name as in second.cpp
+</span><span style="color:#75715e"></span>}
+</code></pre></div></p>
+
+<p>second.cpp (nearly the same as above, <code>test()</code> differs slightly in the string):
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-C++" data-lang="C++"><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;cstdio&gt;</span><span style="color:#75715e">
+</span><span style="color:#75715e"></span>
+<span style="color:#66d9ef">template</span><span style="color:#f92672">&lt;</span><span style="color:#66d9ef">int</span><span style="color:#f92672">&gt;</span>
+<span style="color:#66d9ef">void</span> test(){
+	puts(<span style="color:#e6db74">&#34;test in second.cpp called&#34;</span>); <span style="color:#75715e">// templated function varies, but has the same name
+</span><span style="color:#75715e"></span>}
+
+<span style="color:#66d9ef">void</span> foo_second(){
+	test<span style="color:#f92672">&lt;</span><span style="color:#ae81ff">0</span><span style="color:#f92672">&gt;</span>(); <span style="color:#75715e">// generate instance, weak symbol with the same name as in first.cpp
+</span><span style="color:#75715e"></span>}
+</code></pre></div></p>
+
+<p>main.cpp:
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-C++" data-lang="C++"><span style="color:#66d9ef">void</span> <span style="color:#a6e22e">foo_first</span>();  <span style="color:#75715e">// forward declare to not need headers
+</span><span style="color:#75715e"></span><span style="color:#66d9ef">void</span> <span style="color:#a6e22e">foo_second</span>(); <span style="color:#75715e">//
+</span><span style="color:#75715e"></span>
+<span style="color:#66d9ef">int</span> <span style="color:#a6e22e">main</span>(){
+	foo_first();  <span style="color:#75715e">// call both functions
+</span><span style="color:#75715e"></span>	foo_second(); <span style="color:#75715e">//
+</span><span style="color:#75715e"></span>	<span style="color:#66d9ef">return</span> <span style="color:#ae81ff">0</span>;
+}
+</code></pre></div></p>
+
+<p>The program output varies depending on which order the linker gets to know the symbols.</p>
+
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">$ g++ main.cpp first.cpp second.cpp -o main <span style="color:#f92672">&amp;&amp;</span> ./main
+test in first.cpp called
+test in first.cpp called
+$ g++ main.cpp second.cpp first.cpp -o main <span style="color:#f92672">&amp;&amp;</span> ./main
+test in second.cpp called
+test in second.cpp called</code></pre></div>
+
+<p>If we turn on optimizations, the call to <code>test()</code> in <code>foo_first()</code> and <code>foo_second()</code> gets inlined, picking <code>test()</code> from the same file.
+Hence, we get the expected output.</p>
+
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">$ g++ -O2 main.cpp first.cpp second.cpp -o main <span style="color:#f92672">&amp;&amp;</span> ./main
+test in first.cpp called
+test in second.cpp called</code></pre></div>
+
+<p>As with other classes and functions, never have different implementations with the same name.
+Normally, you get a linker error (multiple definitions), but not for templates.</p>
+
+<h1 id="consolidating-independent-member-functions">Consolidating Independent Member Functions</h1>
+
+<p>Template instances with the same parameters are fine.
+The linker makes sure that there will be only one function in the executable.
+But what about different parameters?
+Let us look at another small example:</p>
+
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-C++" data-lang="C++"><span style="color:#75715e">// generates a new copy of all member function for each instantiation
+</span><span style="color:#75715e"></span><span style="color:#66d9ef">template</span><span style="color:#f92672">&lt;</span><span style="color:#66d9ef">typename</span> T, <span style="color:#66d9ef">int</span> N<span style="color:#f92672">&gt;</span>
+<span style="color:#66d9ef">class</span><span style="color:#960050;background-color:#1e0010"> </span><span style="color:#a6e22e">MyArray</span>{
+<span style="color:#66d9ef">private</span><span style="color:#f92672">:</span>
+	<span style="color:#66d9ef">int</span> metaData;
+	T data[N];
+
+<span style="color:#66d9ef">public</span><span style="color:#f92672">:</span>
+	<span style="color:#75715e">// identical for all template parameters as it is independent of them
+</span><span style="color:#75715e"></span>	<span style="color:#75715e">// 1. How to consolidate and have just one function in the executable?
+</span><span style="color:#75715e"></span>	[[gnu<span style="color:#f92672">::</span>noinline]]
+	<span style="color:#66d9ef">void</span> setMetaData(<span style="color:#66d9ef">int</span> meta){
+		metaData <span style="color:#f92672">=</span> meta;
+	}
+
+	<span style="color:#75715e">// depends on T, but generates identical code for types of the same size
+</span><span style="color:#75715e"></span>	<span style="color:#75715e">// 2. How to consolidate if identical code was generated?
+</span><span style="color:#75715e"></span>	[[gnu<span style="color:#f92672">::</span>noinline]]
+	T <span style="color:#f92672">&amp;</span><span style="color:#66d9ef">operator</span>[](<span style="color:#66d9ef">unsigned</span> idx){
+		<span style="color:#66d9ef">return</span> data[idx];
+	}
+};
+
+<span style="color:#66d9ef">int</span> <span style="color:#a6e22e">main</span>(<span style="color:#66d9ef">int</span> argc, <span style="color:#66d9ef">char</span> <span style="color:#f92672">*</span>argv[]){
+	<span style="color:#75715e">// instantiate template for two types: int and float, both 4-byte wide
+</span><span style="color:#75715e"></span>	MyArray<span style="color:#f92672">&lt;</span><span style="color:#66d9ef">int</span>,  <span style="color:#ae81ff">1024</span><span style="color:#f92672">&gt;</span> arr_int;
+	MyArray<span style="color:#f92672">&lt;</span><span style="color:#66d9ef">float</span>,<span style="color:#ae81ff">1024</span><span style="color:#f92672">&gt;</span> arr_float;
+
+	<span style="color:#75715e">// use setMetaData() for both template types
+</span><span style="color:#75715e"></span>	arr_int.setMetaData(<span style="color:#ae81ff">42</span>);
+	arr_float.setMetaData(<span style="color:#ae81ff">23</span>);
+
+	<span style="color:#75715e">// use array access operator for both types
+</span><span style="color:#75715e"></span>	<span style="color:#66d9ef">for</span>(<span style="color:#66d9ef">unsigned</span> i<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>; i<span style="color:#f92672">&lt;</span>argc; <span style="color:#f92672">++</span>i){
+		arr_int[i] <span style="color:#f92672">=</span> i;
+		arr_float[i] <span style="color:#f92672">=</span> i;
+	}
+	<span style="color:#66d9ef">return</span> <span style="color:#ae81ff">0</span>;
+}
+</code></pre></div>
+
+<p>The program does not compute anything useful.
+It just contains a simple template implementing a fixed-size array with the type of the elements and the array size as template parameters, similar to <code>std::array</code>.
+The member function <code>setMetaData()</code> is just a setter independent of the template parameters.
+On the other hand, <code>operator[]()</code> depends on the template parameter <code>T</code>.
+Both member functions are marked with the attribute <code>noinline</code> which prevents inlining.
+Let us assume these functions are big and used at various places throughout the program such that the inliner does not inline the calls.
+The code inside of <code>main</code> is not important.
+It makes use of both member functions and instantiates the template for <code>int</code> and <code>float</code>.</p>
+
+<p>Let us compile and have a look at the functions in the resulting executable.</p>
+
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-txt" data-lang="txt">$ g++ myarray.cpp -o myarray
+$ objdump -tC ./myarray | grep &#39;MyArray&#39;
+000000000000125c  w    F .text  0000000000000023              MyArray&lt;int, 1024&gt;::operator[](unsigned int)
+0000000000001244  w    F .text  0000000000000017              MyArray&lt;float, 1024&gt;::setMetaData(int)
+000000000000122c  w    F .text  0000000000000017              MyArray&lt;int, 1024&gt;::setMetaData(int)
+0000000000001280  w    F .text  0000000000000023              MyArray&lt;float, 1024&gt;::operator[](unsigned int)</code></pre></div>
+
+<p>As we expected, every member function gets instantiated per template parameter.
+Now, let us see if optimizations make a difference.</p>
+
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-txt" data-lang="txt">$ g++ -O2 -march=native myarray.cpp -o myarray
+$ objdump -tC ./myarray | grep &#39;MyArray&#39;
+00000000000011f0 l     F .text  0000000000000003              MyArray&lt;int, 1024&gt;::setMetaData(int) [clone .isra.0]
+00000000000011f0 l     F .text  0000000000000003              MyArray&lt;float, 1024&gt;::setMetaData(int) [clone .isra.1]
+0000000000001200  w    F .text  0000000000000008              MyArray&lt;int, 1024&gt;::operator[](unsigned int)
+0000000000001210  w    F .text  0000000000000008              MyArray&lt;float, 1024&gt;::operator[](unsigned int)</code></pre></div>
+
+<p>If we look carefully (ignoring the different order), we notice that the first column is now the same for the two instances of <code>setMetaData()</code>.
+This is the address of the function in the executable.
+<code>-O2</code> enables <code>-fipa-icf</code><sup class="footnote-ref" id="fnref:1"><a href="#fn:1">1</a></sup> which folds the two instances of <code>setMetaData()</code> to one single function, but the symbols remain.
+So, we are still littering the symbol table but at least the identical code is shared now.</p>
+
+<p>The optimizations did not help for <code>operator[]()</code>.
+The code is still not shared.
+Maybe the assumption, that the code is identical, is not correct.
+We can disassemble the code with <code>objdump -DC</code> and search for the functions.
+Another option is to use <code>gdb</code> and its <code>disassemble</code> command, but we have to use mangled names.</p>
+
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">$ gdb -nx -batch -ex <span style="color:#e6db74">&#39;disassemble _ZN7MyArrayIfLi1024EEixEj&#39;</span> ./myarray</code></pre></div>
+
+<p>If we enable debug information during compilation, we can also use function signatures<sup class="footnote-ref" id="fnref:2"><a href="#fn:2">2</a></sup>.</p>
+
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">$ g++ -g -O2 -march<span style="color:#f92672">=</span>native myarray.cpp -o myarray
+$ gdb -nx -batch -ex <span style="color:#e6db74">&#39;disassemble MyArray&lt;int,1024&gt;::operator[](unsigned)&#39;</span> ./myarray 
+Dump of assembler code <span style="color:#66d9ef">for</span> <span style="color:#66d9ef">function</span> MyArray&lt;int, <span style="color:#ae81ff">1024</span>&gt;::operator<span style="color:#f92672">[](</span>unsigned int<span style="color:#f92672">)</span>:
+   0x0000000000001200 &lt;+0&gt;:     mov    %esi,%esi
+   0x0000000000001202 &lt;+2&gt;:     lea    0x4<span style="color:#f92672">(</span>%rdi,%rsi,4<span style="color:#f92672">)</span>,%rax
+   0x0000000000001207 &lt;+7&gt;:     retq   
+End of assembler dump.
+$ gdb -nx -batch -ex <span style="color:#e6db74">&#39;disassemble MyArray&lt;float,1024&gt;::operator[](unsigned)&#39;</span> ./myarray
+Dump of assembler code <span style="color:#66d9ef">for</span> <span style="color:#66d9ef">function</span> MyArray&lt;float, <span style="color:#ae81ff">1024</span>&gt;::operator<span style="color:#f92672">[](</span>unsigned int<span style="color:#f92672">)</span>:
+   0x0000000000001210 &lt;+0&gt;:     mov    %esi,%esi
+   0x0000000000001212 &lt;+2&gt;:     lea    0x4<span style="color:#f92672">(</span>%rdi,%rsi,4<span style="color:#f92672">)</span>,%rax
+   0x0000000000001217 &lt;+7&gt;:     retq   
+End of assembler dump.</code></pre></div>
+
+<p>Even if you cannot read x86 assembly, you can clearly see that these two functions are identical.</p>
+
+<h1 id="consolidating-identical-instances">Consolidating Identical Instances</h1>
+
+<p>If we look closely at <code>MyArray</code> and how it uses the template parameter <code>T</code>, we will notice that it treats it as a black box.
+It does not apply any operation on the type.
+An array of elements is stored in <code>data</code> and accessed by <code>operator[]()</code>.
+Only the size of <code>T</code> makes a difference.
+We can reimplement <code>MyArray</code> to make this more explicit.</p>
+
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-C++" data-lang="C++"><span style="color:#66d9ef">template</span><span style="color:#f92672">&lt;</span><span style="color:#66d9ef">int</span> size, <span style="color:#66d9ef">int</span> amount<span style="color:#f92672">&gt;</span>
+<span style="color:#66d9ef">class</span><span style="color:#960050;background-color:#1e0010"> </span><span style="color:#a6e22e">MyArrayImpl</span>{
+<span style="color:#66d9ef">private</span><span style="color:#f92672">:</span>
+	<span style="color:#66d9ef">int</span> metaData;
+	<span style="color:#66d9ef">unsigned</span> <span style="color:#66d9ef">char</span> data[size <span style="color:#f92672">*</span> amount];
+
+<span style="color:#66d9ef">public</span><span style="color:#f92672">:</span>
+	[[gnu<span style="color:#f92672">::</span>noinline]]
+	<span style="color:#66d9ef">void</span> setMetaData(<span style="color:#66d9ef">int</span> meta){
+		metaData <span style="color:#f92672">=</span> meta;
+	}
+
+	[[gnu<span style="color:#f92672">::</span>noinline]]
+	<span style="color:#66d9ef">unsigned</span> <span style="color:#66d9ef">char</span> <span style="color:#f92672">*</span><span style="color:#66d9ef">operator</span>[](<span style="color:#66d9ef">unsigned</span> idx){
+		<span style="color:#66d9ef">return</span> <span style="color:#f92672">&amp;</span>data[idx <span style="color:#f92672">*</span> size];
+	}
+};
+
+<span style="color:#66d9ef">template</span><span style="color:#f92672">&lt;</span><span style="color:#66d9ef">typename</span> T, <span style="color:#66d9ef">int</span> N<span style="color:#f92672">&gt;</span>
+<span style="color:#66d9ef">class</span><span style="color:#960050;background-color:#1e0010"> </span><span style="color:#a6e22e">MyArray</span>{
+<span style="color:#66d9ef">private</span><span style="color:#f92672">:</span>
+	MyArrayImpl<span style="color:#f92672">&lt;</span><span style="color:#66d9ef">sizeof</span>(T),N<span style="color:#f92672">&gt;</span> impl;
+
+<span style="color:#66d9ef">public</span><span style="color:#f92672">:</span>
+	<span style="color:#66d9ef">void</span> setMetaData(<span style="color:#66d9ef">int</span> meta){
+		impl.setMetaData(meta);
+	}
+
+	T <span style="color:#f92672">&amp;</span><span style="color:#66d9ef">operator</span>[](<span style="color:#66d9ef">unsigned</span> idx){
+		<span style="color:#66d9ef">return</span> <span style="color:#f92672">*</span>(T<span style="color:#f92672">*</span>)impl[idx];
+	}
+};
+</code></pre></div>
+
+<p><code>MyArrayImpl</code> just stores bytes now.
+It gets the size of an element and the number of elements passed as template parameters.
+<code>MyArray</code> acts as a decorator to still provide type safety.
+It just forwards all calls to <code>MyArrayImpl</code> and reinterprets the stored bytes to the correct type.
+The code in <code>main</code> does not need to be changed.</p>
+
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-txt" data-lang="txt">$ g++ -O2 -march=native myarray2.cpp -o myarray2
+$ objdump -tC ./myarray2 | grep &#39;MyArray&#39;
+00000000000011f0 l     F .text  0000000000000003              MyArrayImpl&lt;4, 1024&gt;::setMetaData(int) [clone .isra.0]
+0000000000001200  w    F .text  0000000000000009              MyArrayImpl&lt;4, 1024&gt;::operator[](unsigned int)</code></pre></div>
+
+<p>The member functions in <code>MyArray</code> get inlined as they are just forwarding.
+<code>MyArrayImpl</code> only gets instantiated once with size of 4 as <code>int</code> and <code>float</code> have the same size.</p>
+
+<p>This is not an ideal solution.
+Not every container can treat its elements as black boxes, e.g., containers storing elements in order to provide faster search need to compare elements.
+It gets hard to identify groups of types which behave identical considering the applied operations.
+An automatic solution would be much appreciated.</p>
+
+<p>The linker to the rescue!
+When studying the manpage of GCC and its flag <code>-fipa-icf</code>, one gets to know that the gold linker has a similar optimization pass providing ICF.
+Time to put it to a test.</p>
+
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">$ g++ -O2 -march<span style="color:#f92672">=</span>native -ffunction-sections -fuse-ld<span style="color:#f92672">=</span>gold -Wl,--icf<span style="color:#f92672">=</span>all myarray.cpp -o myarray</code></pre></div>
+
+<p>The linker only works on the level of sections which means we have to put every function in its own section with the flag <code>-ffunction-sections</code>.
+Then, we have to use <code>ld.gold</code> as linker instead of the default <code>ld</code>.
+The flag <code>-fuse-ld=gold</code> changes the linker to gold.
+To enable the ICF pass, we pass <code>--icf=all</code> to the linker with the <code>-Wl,&lt;linker-param&gt;</code> flag.</p>
+
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">$ objdump -tC ./myarray | grep <span style="color:#e6db74">&#39;MyArray&#39;</span>
+<span style="color:#ae81ff">0000000000000730</span> l     F .text  <span style="color:#ae81ff">0000000000000003</span>              MyArray&lt;int, <span style="color:#ae81ff">1024</span>&gt;::setMetaData<span style="color:#f92672">(</span>int<span style="color:#f92672">)</span> <span style="color:#f92672">[</span>clone .isra.0<span style="color:#f92672">]</span>
+<span style="color:#ae81ff">0000000000000730</span> l     F .text  <span style="color:#ae81ff">0000000000000003</span>              MyArray&lt;float, <span style="color:#ae81ff">1024</span>&gt;::setMetaData<span style="color:#f92672">(</span>int<span style="color:#f92672">)</span> <span style="color:#f92672">[</span>clone .isra.1<span style="color:#f92672">]</span>
+<span style="color:#ae81ff">0000000000000740</span>  w    F .text  <span style="color:#ae81ff">0000000000000008</span>              MyArray&lt;int, <span style="color:#ae81ff">1024</span>&gt;::operator<span style="color:#f92672">[](</span>unsigned int<span style="color:#f92672">)</span>
+<span style="color:#ae81ff">0000000000000740</span>  w    F .text  <span style="color:#ae81ff">0000000000000008</span>              MyArray&lt;float, <span style="color:#ae81ff">1024</span>&gt;::operator<span style="color:#f92672">[](</span>unsigned int<span style="color:#f92672">)</span></code></pre></div>
+
+<p>Finally, we get the result we were looking for without modifications of the source code.
+Again, the symbol table still contains all instances, but the they point to shared code.</p>
+
+<p>This also works with optimizations turned off for GCC.
+The gold linker fixes it all up for us, but it introduces a small size overhead in the executable as we have to put every function in its own section with <code>-ffunction-sections</code>.
+The gold linker can also be used for clang which does not provide any optimization pass itself for folding identical code.</p>
+
+<h1 id="conclusion">Conclusion</h1>
+
+<p>GCC with <code>-O2</code> can fold member functions which are independent of the template parameters to a single implementation.
+This only gets us half the way.
+It does not work for member functions which depend on template parameters, but happen to generate identical code.
+The gold linker provides an optimization pass to identify identical functions and let them share their code.
+An option also available to clang.</p>
+<div class="footnotes">
+
+<hr />
+
+<ol>
+<li id="fn:1">This flag alone is not enough, e.g., <code>-O1 -fipa-icf</code> does not work. I do not know which other optimizations need to be enabled which <code>-O2</code> enables.
+ <a class="footnote-return" href="#fnref:1"><sup>[return]</sup></a></li>
+<li id="fn:2">Another option is to use breakpoints: <code>gdb -nx -batch -ex 'b MyArray&lt;int,1024&gt;::operator[](unsigned int)' -ex 'r' -ex 'disassemble' ./myarray</code>
+ <a class="footnote-return" href="#fnref:2"><sup>[return]</sup></a></li>
+</ol>
+</div>
+
+	</article>
+
+	<div class="pagination">
+		<a href="/posts/removing-unused-code/" class="left arrow">&#8592;</a>
+		<a href="#" class="top">Top</a>
+	</div>
+</main>
+
+
+		</div>
+	</body>
+</html>
