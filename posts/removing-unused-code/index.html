@@ -1,210 +1,83 @@
-<!DOCTYPE html>
-<html>
-	<head>
-		<title>Removing Unused Code</title>
-
-		<link rel="stylesheet" href="/css/style.css">
-
-		</head>
-	<body>
-		<nav class="header">
-			<div class="header-container">
-				<a href="/">
-					<h2>Dangerous Assembly</h2>
-				</a>
-				
-			</div>
-		</nav>
-
-		<div id="content">
-
-<main>
-	<article>
-		<header>
-        	<time datetime="2019-01-05 23:25:03 &#43;0100 CET" class="catalogue-time">2019-01-05</time>
-			<h1>Removing Unused Code</h1>
-			<div class="post-line"></div>
-		</header>
-		<aside>
-			<details>
-				<summary>Contents</summary><nav id="TableOfContents">
-<ul>
-<li><a href="#example-program">Example Program</a></li>
-<li><a href="#inspecting-executable">Inspecting Executable</a></li>
-<li><a href="#internal-linkage">Internal Linkage</a></li>
-<li><a href="#garbage-collection-with-the-linker">Garbage Collection with the Linker</a></li>
-<li><a href="#link-time-optimization">Link-Time Optimization</a></li>
-<li><a href="#conclusion">Conclusion</a></li>
-</ul>
-</nav>
-			</details>
-		</aside>
-		
-
-<p>I recently went on a little journey to get a better understanding of the linker used in C++.
+<!doctype html><html><head><title>Removing Unused Code</title><link rel=stylesheet href=/css/style.css></head><body><nav class=header><div class=header-container><a href=/><h2>Dangerous Assembly</h2></a></div></nav><div id=content><main><article><header><time datetime="2019-01-05 23:25:03 &#43;0100 CET" class=catalogue-time>2019-01-05</time><h1>Removing Unused Code</h1><div class=post-line></div></header><aside><details><summary>Contents</summary><nav id=TableOfContents><ul><li><a href=#example-program>Example Program</a></li><li><a href=#inspecting-executable>Inspecting Executable</a></li><li><a href=#internal-linkage>Internal Linkage</a></li><li><a href=#garbage-collection-with-the-linker>Garbage Collection with the Linker</a></li><li><a href=#link-time-optimization>Link-Time Optimization</a></li><li><a href=#conclusion>Conclusion</a></li></ul></nav></details></aside><p>I recently went on a little journey to get a better understanding of the linker used in C++.
 Like many other C++ developers, my mental model of what the linker actually does is very limited.
 But I&rsquo;m always interested in learning new tricks about the tools I use regularly, especially new optimizations slumbering behind some obscure flag.
-In this post, we will have a look at the removal of unused functions from the executable and how the linker can help us with this task.</p>
-
-<p>Wait a minute. In a well maintained project there shouldn&rsquo;t be any unused function, right?
+In this post, we will have a look at the removal of unused functions from the executable and how the linker can help us with this task.</p><p>Wait a minute. In a well maintained project there shouldn&rsquo;t be any unused function, right?
 Well, it happens more often than you think that some function was left behind after some refactoring and nobody notices that it is not required anymore.
 And there&rsquo;s another important case: static linking.
 Usually a program which statically links another library is not using every function of the library.
 Only a subset of the functions are called.
-All other functions are unused.</p>
-
-<p>Surprisingly, a lot of C++ developers assume that todays optimizing compilers just take care of it.
+All other functions are unused.</p><p>Surprisingly, a lot of C++ developers assume that todays optimizing compilers just take care of it.
 The compiler should be able to see that a function is never called and, therefore, exclude it from the executable.
-Let&rsquo;s put that to a test and see for ourselves.</p>
-
-<h1 id="example-program">Example Program</h1>
-
-<p>The following tiny C/C++ program shall be our test case.</p>
-
-<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-C++" data-lang="C++"><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;stdio.h&gt;</span><span style="color:#75715e">
-</span><span style="color:#75715e"></span>
-<span style="color:#66d9ef">void</span> <span style="color:#a6e22e">unused</span>(){
-	puts(<span style="color:#e6db74">&#34;This is dead code which is never called.&#34;</span>);
+Let&rsquo;s put that to a test and see for ourselves.</p><h1 id=example-program>Example Program</h1><p>The following tiny C/C++ program shall be our test case.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>
+</span><span style=color:#75715e></span>
+<span style=color:#66d9ef>void</span> <span style=color:#a6e22e>unused</span>(){
+	puts(<span style=color:#e6db74>&#34;This is dead code which is never called.&#34;</span>);
 }
 
-<span style="color:#66d9ef">int</span> <span style="color:#a6e22e">main</span>(){
-	<span style="color:#66d9ef">return</span> <span style="color:#ae81ff">0</span>;
+<span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>(){
+	<span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
 }
-</code></pre></div>
-
-<p>The program does not do much.
+</code></pre></div><p>The program does not do much.
 It just returns the return code of 0, nothing more.
 Obviously, the function <code>unused()</code> is never called.
-Let&rsquo;s compile it with optimizations turned on.</p>
-
-<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">$ g++ -O2 -march<span style="color:#f92672">=</span>native deadcode.cpp -o deadcode</code></pre></div>
-
-<p>I will focus on &ldquo;standard&rdquo; tools running on Linux, mostly tools from GCC and binutils.
+Let&rsquo;s compile it with optimizations turned on.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-bash data-lang=bash>$ g++ -O2 -march<span style=color:#f92672>=</span>native deadcode.cpp -o deadcode</code></pre></div><p>I will focus on &ldquo;standard&rdquo; tools running on Linux, mostly tools from GCC and binutils.
 You might get other results with different toolchains.
 I will usually check if clang+LLVM have a different behaviour and mention it, if they do.
 Here we use the C++ frontend <code>g++</code> of GCC.
-Compiling the program as C or C++ makes no real difference.</p>
-
-<h1 id="inspecting-executable">Inspecting Executable</h1>
-
-<p>Now that we have an executable, let&rsquo;s have a look if <code>unused()</code> survived all the optimization passes of the compiler and made its way into the executable.</p>
-
-<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">$ objdump -tC deadcode | grep <span style="color:#e6db74">&#39;unused&#39;</span>
-<span style="color:#ae81ff">0000000000001150</span> g     F .text  000000000000000c              unused<span style="color:#f92672">()</span></code></pre></div>
-
-<p><code>objdump</code> should be your goto tool if you want to inspect an executable.
+Compiling the program as C or C++ makes no real difference.</p><h1 id=inspecting-executable>Inspecting Executable</h1><p>Now that we have an executable, let&rsquo;s have a look if <code>unused()</code> survived all the optimization passes of the compiler and made its way into the executable.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-bash data-lang=bash>$ objdump -tC deadcode | grep <span style=color:#e6db74>&#39;unused&#39;</span>
+<span style=color:#ae81ff>0000000000001150</span> g     F .text  000000000000000c              unused<span style=color:#f92672>()</span></code></pre></div><p><code>objdump</code> should be your goto tool if you want to inspect an executable.
 We are interested in the functions contained in the executable.
 The option <code>-t</code> dumps all of them by looking at the symbol table in the executable
 and <code>-C</code> demangles all symbols so that we get C++ function names (a step not required for C programs).
-We pipe the output through <code>grep</code> to only get the entry we are looking for, or nothing if the function was removed.</p>
-
-<p>As we can see, <code>unused()</code> ended up in the executable.
+We pipe the output through <code>grep</code> to only get the entry we are looking for, or nothing if the function was removed.</p><p>As we can see, <code>unused()</code> ended up in the executable.
 The question is: why?
 Why was the compiler unable to see that the function is never called?
 The answer is simple: it can&rsquo;t.
 We did not provide enough information to the compiler.
 For example, we know that there is just one .cpp-file and that we link it to a final program and not a library.
 Both things we did not tell the compiler explicitly.
-It gets more clear when we expand the one-liner we used for compilation to the commands which get run (simplified, pass <code>-v</code> to see the real commands).</p>
-
-<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">$ g++ -O2 -march<span style="color:#f92672">=</span>native deadcode.cpp -o deadcode.o
-$ g++ deadcode.o -o deadcode</code></pre></div>
-
-<p>First, all .cpp-files are compiled to object files, isolated from each other in their own process.
+It gets more clear when we expand the one-liner we used for compilation to the commands which get run (simplified, pass <code>-v</code> to see the real commands).</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-bash data-lang=bash>$ g++ -O2 -march<span style=color:#f92672>=</span>native deadcode.cpp -o deadcode.o
+$ g++ deadcode.o -o deadcode</code></pre></div><p>First, all .cpp-files are compiled to object files, isolated from each other in their own process.
 Afterwards, all object files are linked together to the executable.
-The function <code>unused()</code> in deadcode.cpp has <a href="https://en.cppreference.com/w/cpp/language/storage_duration#Linkage">external linkage</a>.
+The function <code>unused()</code> in deadcode.cpp has <a href=https://en.cppreference.com/w/cpp/language/storage_duration#Linkage>external linkage</a>.
 Hence, it can be called potentially from other .cpp-files.
-The compiler processing deadcode.cpp does not know that there is no external call to <code>unused()</code>.</p>
-
-<h1 id="internal-linkage">Internal Linkage</h1>
-
-<p>One simple solution is to change <code>unused()</code> to internal linkage.
-Static functions are only visible inside the same .cpp-file and, therefore, have internal linkage.</p>
-
-<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-C++" data-lang="C++"><span style="color:#66d9ef">static</span> <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">unused</span>(){
-	puts(<span style="color:#e6db74">&#34;This is dead code which is never called.&#34;</span>);
+The compiler processing deadcode.cpp does not know that there is no external call to <code>unused()</code>.</p><h1 id=internal-linkage>Internal Linkage</h1><p>One simple solution is to change <code>unused()</code> to internal linkage.
+Static functions are only visible inside the same .cpp-file and, therefore, have internal linkage.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=color:#66d9ef>static</span> <span style=color:#66d9ef>void</span> <span style=color:#a6e22e>unused</span>(){
+	puts(<span style=color:#e6db74>&#34;This is dead code which is never called.&#34;</span>);
 }
-</code></pre></div>
-
-<p>C++ has another possibility: anonymous namespaces.
+</code></pre></div><p>C++ has another possibility: anonymous namespaces.
 An unnamed namespace is also just visible inside the same .cpp-file.
-Every function or class declared inside of it has internal linkage.</p>
+Every function or class declared inside of it has internal linkage.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=color:#66d9ef>namespace</span>{
 
-<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-C++" data-lang="C++"><span style="color:#66d9ef">namespace</span>{
-
-<span style="color:#66d9ef">void</span> unused(){
-	puts(<span style="color:#e6db74">&#34;This is dead code which is never called.&#34;</span>);
+<span style=color:#66d9ef>void</span> unused(){
+	puts(<span style=color:#e6db74>&#34;This is dead code which is never called.&#34;</span>);
 }
 
-} <span style="color:#75715e">// anonymous namespace
-</span><span style="color:#75715e"></span></code></pre></div>
-
-<p>The compiler can now see that <code>unused()</code> is only visible inside deadcode.cpp and there is no call to it in deadcode.cpp.
-Hence, the function is unreachable and removed as dead code.</p>
-
-<p>Instead of changing the file by hand, we can use a special flag of GCC.</p>
-
-<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">$ g++ -O2 -march<span style="color:#f92672">=</span>native -fwhole-program deadcode.cpp -o deadcode</code></pre></div>
-
-<p><code>-fwhole-program</code> lets the compiler assume that there is just one .cpp-file and, therefore, set every function except main to internal linkage.
-This will remove <code>unused()</code> without any source changes.</p>
-
-<h1 id="garbage-collection-with-the-linker">Garbage Collection with the Linker</h1>
-
-<p>Obviously, internal linkage cannot help with static libraries.
+} <span style=color:#75715e>// anonymous namespace
+</span><span style=color:#75715e></span></code></pre></div><p>The compiler can now see that <code>unused()</code> is only visible inside deadcode.cpp and there is no call to it in deadcode.cpp.
+Hence, the function is unreachable and removed as dead code.</p><p>Instead of changing the file by hand, we can use a special flag of GCC.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-bash data-lang=bash>$ g++ -O2 -march<span style=color:#f92672>=</span>native -fwhole-program deadcode.cpp -o deadcode</code></pre></div><p><code>-fwhole-program</code> lets the compiler assume that there is just one .cpp-file and, therefore, set every function except main to internal linkage.
+This will remove <code>unused()</code> without any source changes.</p><h1 id=garbage-collection-with-the-linker>Garbage Collection with the Linker</h1><p>Obviously, internal linkage cannot help with static libraries.
 The whole point of functions in a static library is to be called from other .cpp-files.
 They need to have external linkage.
 Different .cpp-files can call different subsets of functions from a static library.
 The compiler processing each .cpp-file in isolation always sees just one subset.
 The only tool which has the full picture is the linker.
 It knows all object files and all libraries involved in the compilation.
-We have to instruct it explicitly to remove unused code.</p>
-
-<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">$ g++ -O2 -march<span style="color:#f92672">=</span>native -ffunction-sections -Wl,--gc-sections deadcode.cpp -o deadcode</code></pre></div>
-
-<p><code>-ffunction-sections</code> puts every function in its own ELF section.
+We have to instruct it explicitly to remove unused code.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-bash data-lang=bash>$ g++ -O2 -march<span style=color:#f92672>=</span>native -ffunction-sections -Wl,--gc-sections deadcode.cpp -o deadcode</code></pre></div><p><code>-ffunction-sections</code> puts every function in its own ELF section.
 The linker only sees sections as a black box.
 <code>--gc-sections</code> tells the linker to track calls into sections and remove unused ones.
 <code>-Wl,&lt;linker-flag&gt;</code> passes a flag to the linker.
-With both flags enabled, the linker can construct a call graph for the whole program and remove <code>unused()</code> even when it has external linkage.</p>
-
-<p>There are some caveats attached to this solution.
+With both flags enabled, the linker can construct a call graph for the whole program and remove <code>unused()</code> even when it has external linkage.</p><p>There are some caveats attached to this solution.
 Putting every function in its own section adds quite some size overhead to the executable when it is not just a toy program.
-In case of static linking, the static library has to be compiled with <code>-ffunction-sections</code> too.</p>
-
-<h1 id="link-time-optimization">Link-Time Optimization</h1>
-
-<p>As we learned, the linker is in a nice position to see every part of a program.
+In case of static linking, the static library has to be compiled with <code>-ffunction-sections</code> too.</p><h1 id=link-time-optimization>Link-Time Optimization</h1><p>As we learned, the linker is in a nice position to see every part of a program.
 Many optimization passes, not just dead code elimination, benefit from a bigger picture of the program.
-Therefore, modern compilers and linkers provide link-time optimization (LTO).</p>
-
-<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">$ g++ -O2 -march<span style="color:#f92672">=</span>native -flto deadcode.cpp -o deadcode</code></pre></div>
-
-<p><code>-flto</code> lets the compiler and its optimization passes see the whole program during linking.
-It sees that <code>unused()</code> is not called in any .cpp-file and removes it as dead code even with external linkage.</p>
-
-<p>Same as before, static libraries have to compiled with LTO enabled, otherwise the compiler cannot reason about it and remove unused code.
-But the main problem of LTO hindering its widespread adoption is very high memory usage and increased compilation time.
+Therefore, modern compilers and linkers provide link-time optimization (LTO).</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-bash data-lang=bash>$ g++ -O2 -march<span style=color:#f92672>=</span>native -flto deadcode.cpp -o deadcode</code></pre></div><p><code>-flto</code> lets the compiler and its optimization passes see the whole program during linking.
+It sees that <code>unused()</code> is not called in any .cpp-file and removes it as dead code even with external linkage.</p><p>Same as before, static libraries have to compiled with LTO enabled, otherwise the compiler cannot reason about it and remove unused code.
+But the main problem of LTO hindering its widespread adoption is high memory consumption and increased compilation time.
 The sequential step of linking is now also used to run optimization passes on bigger parts of the program.
 Linking is not trivially parallelizable like compiling .cpp-files to object files.
-Both, GCC and LLVM are working on improving scalability of LTO, e.g., LLVM with <a href="http://blog.llvm.org/2016/06/thinlto-scalable-and-incremental-lto.html">ThinLTO</a>.</p>
-
-<h1 id="conclusion">Conclusion</h1>
-
-<p>Coming back to our initial question if the compiler can safely remove unused code: yes, the compiler can do it if you ask in the right way.
+Both, GCC and LLVM are working on improving scalability of LTO, e.g., LLVM with <a href=http://blog.llvm.org/2016/06/thinlto-scalable-and-incremental-lto.html>ThinLTO</a>.</p><h1 id=conclusion>Conclusion</h1><p>Coming back to our initial question if the compiler can safely remove unused code: yes, the compiler can do it if you ask in the right way.
 It is not done by simply enabling optimizations.
-LTO is the best variant in my opinion as it results in a lot of other optimizations applied to your program.
-If you can tolerate the scalability issues of the compilation, LTO is the way to go.</p>
-
-	</article>
-
-	<div class="pagination">
-		<a href="#" class="top">Top</a>
-		<a href="/posts/identical-code-folding/" class="right arrow">&#8594;</a>
-	</div>
-</main>
-
-
-		</div>
-	</body>
-</html>
+LTO is the best variant in my opinion as it also enables a lot of other optimizations to be applied to your whole program.
+If you can tolerate the scalability issues of the compilation, LTO is the way to go.</p></article><div class=pagination><a href=# class=top>Top</a>
+<a href=/posts/identical-code-folding/ class="right arrow">&#8594;</a></div></main></div></body></html>
