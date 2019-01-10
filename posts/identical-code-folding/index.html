@@ -92,18 +92,18 @@ On the other hand, <code>operator[]()</code> depends on the template parameter <
 Both member functions are marked with the attribute <code>noinline</code> which prevents inlining.
 Let us assume these functions are big and used at various places throughout the program such that the inliner does not inline the calls.
 The code inside of <code>main</code> is not important.
-It makes use of both member functions and instantiates the template for <code>int</code> and <code>float</code>.</p><p>Let us compile and have a look at the functions in the resulting executable.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-txt data-lang=txt>$ g++ myarray.cpp -o myarray
-$ objdump -tC ./myarray | grep &#39;MyArray&#39;
-000000000000125c  w    F .text  0000000000000023              MyArray&lt;int, 1024&gt;::operator[](unsigned int)
-0000000000001244  w    F .text  0000000000000017              MyArray&lt;float, 1024&gt;::setMetaData(int)
-000000000000122c  w    F .text  0000000000000017              MyArray&lt;int, 1024&gt;::setMetaData(int)
-0000000000001280  w    F .text  0000000000000023              MyArray&lt;float, 1024&gt;::operator[](unsigned int)</code></pre></div><p>As we expected, every member function gets instantiated per template parameter.
-Now, let us see if optimizations make a difference.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-txt data-lang=txt>$ g++ -O2 -march=native myarray.cpp -o myarray
-$ objdump -tC ./myarray | grep &#39;MyArray&#39;
-00000000000011f0 l     F .text  0000000000000003              MyArray&lt;int, 1024&gt;::setMetaData(int) [clone .isra.0]
-00000000000011f0 l     F .text  0000000000000003              MyArray&lt;float, 1024&gt;::setMetaData(int) [clone .isra.1]
-0000000000001200  w    F .text  0000000000000008              MyArray&lt;int, 1024&gt;::operator[](unsigned int)
-0000000000001210  w    F .text  0000000000000008              MyArray&lt;float, 1024&gt;::operator[](unsigned int)</code></pre></div><p>If we look carefully (ignoring the different order), we notice that the first column is now the same for the two instances of <code>setMetaData()</code>.
+It makes use of both member functions and instantiates the template for <code>int</code> and <code>float</code>.</p><p>Let us compile and have a look at the functions in the resulting executable.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-bash data-lang=bash>$ g++ myarray.cpp -o myarray
+$ objdump -tC ./myarray | grep <span style=color:#e6db74>&#39;MyArray&#39;</span>
+000000000000125c  w    F .text  <span style=color:#ae81ff>0000000000000023</span>              MyArray&lt;int, <span style=color:#ae81ff>1024</span>&gt;::operator<span style=color:#f92672>[](</span>unsigned int<span style=color:#f92672>)</span>
+<span style=color:#ae81ff>0000000000001244</span>  w    F .text  <span style=color:#ae81ff>0000000000000017</span>              MyArray&lt;float, <span style=color:#ae81ff>1024</span>&gt;::setMetaData<span style=color:#f92672>(</span>int<span style=color:#f92672>)</span>
+000000000000122c  w    F .text  <span style=color:#ae81ff>0000000000000017</span>              MyArray&lt;int, <span style=color:#ae81ff>1024</span>&gt;::setMetaData<span style=color:#f92672>(</span>int<span style=color:#f92672>)</span>
+<span style=color:#ae81ff>0000000000001280</span>  w    F .text  <span style=color:#ae81ff>0000000000000023</span>              MyArray&lt;float, <span style=color:#ae81ff>1024</span>&gt;::operator<span style=color:#f92672>[](</span>unsigned int<span style=color:#f92672>)</span></code></pre></div><p>As we expected, every member function gets instantiated per template parameter.
+Now, let us see if optimizations make a difference.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-bash data-lang=bash>$ g++ -O2 -march<span style=color:#f92672>=</span>native myarray.cpp -o myarray
+$ objdump -tC ./myarray | grep <span style=color:#e6db74>&#39;MyArray&#39;</span>
+00000000000011f0 l     F .text  <span style=color:#ae81ff>0000000000000003</span>              MyArray&lt;int, <span style=color:#ae81ff>1024</span>&gt;::setMetaData<span style=color:#f92672>(</span>int<span style=color:#f92672>)</span> <span style=color:#f92672>[</span>clone .isra.0<span style=color:#f92672>]</span>
+00000000000011f0 l     F .text  <span style=color:#ae81ff>0000000000000003</span>              MyArray&lt;float, <span style=color:#ae81ff>1024</span>&gt;::setMetaData<span style=color:#f92672>(</span>int<span style=color:#f92672>)</span> <span style=color:#f92672>[</span>clone .isra.1<span style=color:#f92672>]</span>
+<span style=color:#ae81ff>0000000000001200</span>  w    F .text  <span style=color:#ae81ff>0000000000000008</span>              MyArray&lt;int, <span style=color:#ae81ff>1024</span>&gt;::operator<span style=color:#f92672>[](</span>unsigned int<span style=color:#f92672>)</span>
+<span style=color:#ae81ff>0000000000001210</span>  w    F .text  <span style=color:#ae81ff>0000000000000008</span>              MyArray&lt;float, <span style=color:#ae81ff>1024</span>&gt;::operator<span style=color:#f92672>[](</span>unsigned int<span style=color:#f92672>)</span></code></pre></div><p>If we look carefully (ignoring the different order), we notice that the first column is now the same for the two instances of <code>setMetaData()</code>.
 This is the address of the function in the executable.
 <code>-O2</code> enables <code>-fipa-icf</code><sup class=footnote-ref id=fnref:1><a href=#fn:1>1</a></sup> which folds the two instances of <code>setMetaData()</code> to one single function, but the symbols remain.
 So, we are still littering the symbol table but at least the identical code is shared now.</p><p>The optimizations did not help for <code>operator[]()</code>.
@@ -162,10 +162,10 @@ We can reimplement <code>MyArray</code> to make this more explicit.</p><div clas
 It gets the size of an element and the number of elements passed as template parameters.
 <code>MyArray</code> acts as a decorator to still provide type safety.
 It just forwards all calls to <code>MyArrayImpl</code> and reinterprets the stored bytes to the correct type.
-The code in <code>main</code> does not need to be changed.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-txt data-lang=txt>$ g++ -O2 -march=native myarray2.cpp -o myarray2
-$ objdump -tC ./myarray2 | grep &#39;MyArray&#39;
-00000000000011f0 l     F .text  0000000000000003              MyArrayImpl&lt;4, 1024&gt;::setMetaData(int) [clone .isra.0]
-0000000000001200  w    F .text  0000000000000009              MyArrayImpl&lt;4, 1024&gt;::operator[](unsigned int)</code></pre></div><p>The member functions in <code>MyArray</code> get inlined as they are just forwarding.
+The code in <code>main</code> does not need to be changed.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-bash data-lang=bash>$ g++ -O2 -march<span style=color:#f92672>=</span>native myarray2.cpp -o myarray2
+$ objdump -tC ./myarray2 | grep <span style=color:#e6db74>&#39;MyArray&#39;</span>
+00000000000011f0 l     F .text  <span style=color:#ae81ff>0000000000000003</span>              MyArrayImpl&lt;<span style=color:#ae81ff>4</span>, <span style=color:#ae81ff>1024</span>&gt;::setMetaData<span style=color:#f92672>(</span>int<span style=color:#f92672>)</span> <span style=color:#f92672>[</span>clone .isra.0<span style=color:#f92672>]</span>
+<span style=color:#ae81ff>0000000000001200</span>  w    F .text  <span style=color:#ae81ff>0000000000000009</span>              MyArrayImpl&lt;<span style=color:#ae81ff>4</span>, <span style=color:#ae81ff>1024</span>&gt;::operator<span style=color:#f92672>[](</span>unsigned int<span style=color:#f92672>)</span></code></pre></div><p>The member functions in <code>MyArray</code> get inlined as they are just forwarding.
 <code>MyArrayImpl</code> only gets instantiated once with size of 4 as <code>int</code> and <code>float</code> have the same size.</p><p>This is not an ideal solution.
 Not every container can treat its elements as black boxes, e.g., containers storing elements in a specific order to provide faster search need to compare elements.
 It gets hard to identify groups of types which behave identical considering the applied operations.

@@ -1,5 +1,6 @@
 html, body{
-	color: #555;
+	color: #000;
+	background-color: #fff;
 	margin: 0;
 	padding: 0;
 }
@@ -15,12 +16,12 @@ main, .header-container{
 	box-shadow: 0 2px 2px -2px rgba(0, 0, 0, 0.2);
 }
 .header a{
-	color: #555;
+	color: #000;
 }
 
 .catalogue-item{
 	display: block;
-	color: #555;
+	color: #000;
 	padding: 2rem 0;
 	border-bottom: 1px solid #e5e5e5;
 }
@@ -39,10 +40,16 @@ main, .header-container{
 .catalogue-item:hover .catalogue-line{
 	width: 5rem;
 }
+.catalogue-item:hover{
+	text-decoration: none;
+}
 
 a{
 	color: #4a9ae1;
 	text-decoration: none;
+}
+a:hover{
+	text-decoration: underline;
 }
 
 article>header{
@@ -80,6 +87,19 @@ pre code{
 }
 code{
 	background-color: #f9f9f9;
-	color: #bf616a;
+	color: #e52633;
 	padding: .25em .5em;
+}
+.highlight{
+	position: relative;
+}
+pre code::before{
+	content: attr(data-lang);
+	position: absolute;
+	top: 1px;
+	right: 1px;
+	padding: 2px 6px;
+	font-size: 10px;
+	color: #aaa;
+	background-color: #444;
 }
