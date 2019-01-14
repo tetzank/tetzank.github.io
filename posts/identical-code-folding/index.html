@@ -187,5 +187,5 @@ It does not work for member functions which depend on template parameters, but h
 The gold linker provides an optimization pass to identify identical functions and let them share their code.
 An option also available to clang.</p><div class=footnotes><hr><ol><li id=fn:1>This flag alone is not enough, e.g., <code>-O1 -fipa-icf</code> does not work. I do not know which other optimizations need to be enabled which <code>-O2</code> enables.
 <a class=footnote-return href=#fnref:1><sup>[return]</sup></a></li><li id=fn:2>Another option is to use breakpoints: <code>gdb -nx -batch -ex 'b MyArray&lt;int,1024&gt;::operator[](unsigned int)' -ex 'r' -ex 'disassemble' ./myarray</code>
-<a class=footnote-return href=#fnref:2><sup>[return]</sup></a></li></ol></div></article><div class=pagination><a href=/posts/removing-unused-code/ class="left arrow">&#8592;</a>
+<a class=footnote-return href=#fnref:2><sup>[return]</sup></a></li></ol></div></article><div class=pagination><a href=/posts/removing-unused-code/ class="left arrow">&#8592; previous</a>
 <a href=# class=top>Top</a></div></main></div></body></html>
