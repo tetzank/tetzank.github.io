@@ -1,0 +1,143 @@
+<!doctype html><html><head><title>X-Macros</title><link rel=stylesheet href=/css/style.css></head><body><nav class=header><div class=header-container><a href=/>Dangerous Assembly</a><div class=header-menu><a href=/publications/>publications</a>
+<a href=/about/>about</a></div></div></nav><div id=content><main><article><header><time datetime="2019-04-23 16:34:00 &#43;0200 CEST" class=catalogue-time>2019-04-23</time><h1>X-Macros</h1><div class=post-line></div></header><aside><details><summary>Contents</summary><nav id=TableOfContents><ul><li><a href=#a-macro-is-not-a-function>A Macro is not a Function</a></li><li><a href=#nested-expansions>Nested Expansions</a></li><li><a href=#more-nesting>More Nesting</a></li><li><a href=#conclusion>Conclusion</a></li></ul></nav></details></aside><p>A lot of C++ developers try to avoid preprocessor macros like the plague.
+There are genuine reasons for that.
+Macros might look like functions but they behave differently, resulting in confusing bugs when not treated carefully.
+But even in modern C++, macros still have their use cases.
+In this post, I want to talk about a special kind of macro called X-macro which is mostly used to generate various code fragments from a single list of elements.</p><h1 id=a-macro-is-not-a-function>A Macro is not a Function</h1><p>When I started developing in C/C++, I used macros as constants and small inlined functions.
+This works for simple expressions, if one writes the macro carefully, but not for code fragments consisting of multiple statements.
+Here is a simple expression macro squaring a passed value:</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=color:#75715e>#define SQUARE(value) value * value
+</span></code></pre></div><p>The macro is expanded to the passed value multiplied by itself.
+Looks easy enough.
+What could possibly go wrong?
+Well, a lot actually.
+What is the result of <code>SQUARE(i+1)</code>?</p><p>In a function call, the expression <code>i+1</code> is evaluated at the call side and the resulting value passed as parameter to the function.
+Call-side evaluation of parameters is not happening for macros.<sup class=footnote-ref id=fnref:1><a href=#fn:1>1</a></sup>
+The whole parameter expression is inserted everywhere the parameter is used in the macro definition, resulting in <code>i+1 * i+1</code> which is not what we intented to calculate.
+Operator precedence gets in our way.
+The fix is obvious: put everything in parentheses!</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=color:#75715e>#define SQUARE(expr) ((expr) * (expr))
+</span></code></pre></div><p>The reason for this behavior is easy to understand: the preprocessor does not know anything about the semantics of the expressions.
+Basically, it just copies text around following its expansion rules, not knowing what the text means and if the assembled code makes any sense for the following compilation step.
+This separation of concerns keeps tools simple, but can lead to unexpected pitfalls.
+If you feel curious about other common problems, you can check out the <a href=https://gcc.gnu.org/onlinedocs/cpp/Macro-Pitfalls.html#Macro-Pitfalls>&lsquo;Macro Pitfalls&rsquo;</a> section in the documentation.</p><p>I do not use macros as inlined functions anymore.
+A normal function has way less surprises in store than a macro.
+The compiler is usually also better at deciding when to inline a function call.
+If need be, one can still force the compiler to inline the function call with the function attribute <code>[[gnu::always_inline]]</code>, or a similar attribute for your compiler of choice.</p><h1 id=nested-expansions>Nested Expansions</h1><p>After a macro is expanded, the whole resulting body of the macro is scanned another time for any known macros to be expanded.
+This expansion rule allows us to write nested macros, leading to so called X-macros.</p><p>The common &ldquo;Hello, World!&rdquo;-example for X-macros is an enumeration and an array holding a string representation for each element of the enum.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=color:#66d9ef>struct</span> colors {
+	<span style=color:#66d9ef>enum</span> enumeration {
+		black, white, red, blue, green
+	};
+	<span style=color:#66d9ef>static</span> <span style=color:#66d9ef>constexpr</span> std<span style=color:#f92672>::</span>array<span style=color:#f92672>&lt;</span><span style=color:#66d9ef>const</span> <span style=color:#66d9ef>char</span><span style=color:#f92672>*</span>,<span style=color:#ae81ff>5</span><span style=color:#f92672>&gt;</span> names {
+		<span style=color:#e6db74>&#34;black&#34;</span>, <span style=color:#e6db74>&#34;white&#34;</span>, <span style=color:#e6db74>&#34;red&#34;</span>, <span style=color:#e6db74>&#34;blue&#34;</span>, <span style=color:#e6db74>&#34;green&#34;</span>
+	};
+};
+</code></pre></div><p>Updates to the enum requires changes to the array as well.
+It would be nice to have just one list of elements and generate the enum and array from that list.
+X-macros can help us here.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=color:#66d9ef>struct</span> colors {
+	<span style=color:#75715e>// list of elements
+</span><span style=color:#75715e></span>	<span style=color:#75715e>#define COLORS \
+</span><span style=color:#75715e></span>		X(black)   \
+		X(white)   \
+		X(red)     \
+		X(blue)    \
+		X(green)
+
+	<span style=color:#75715e>// put each element into the enum
+</span><span style=color:#75715e></span>	<span style=color:#66d9ef>enum</span> enumeration {
+		<span style=color:#75715e>#define X(color) color,
+</span><span style=color:#75715e></span>		COLORS
+		_number_of_elements
+		<span style=color:#75715e>#undef X
+</span><span style=color:#75715e></span>	};
+
+	<span style=color:#75715e>// string for each enum element
+</span><span style=color:#75715e></span>	<span style=color:#66d9ef>static</span> <span style=color:#66d9ef>constexpr</span> std<span style=color:#f92672>::</span>array<span style=color:#f92672>&lt;</span><span style=color:#66d9ef>const</span> <span style=color:#66d9ef>char</span><span style=color:#f92672>*</span>,_number_of_elements<span style=color:#f92672>&gt;</span> names {
+		<span style=color:#75715e>#define X(color) #color,
+</span><span style=color:#75715e></span>		COLORS
+		<span style=color:#75715e>#undef X
+</span><span style=color:#75715e></span>	};
+};
+</code></pre></div><p>First, we define the macro <code>COLORS</code> containing the list of elements.
+Each element is enclosed by another macro <code>X()</code>, yet to be defined.
+Next, we define the enumeration.
+Inside the body of the enum, we define the macro <code>X()</code> to echo the parameter it gets followed by a comma.
+On the next line, the macro <code>COLORS</code> is called which will use the newly defined macro <code>X()</code> inside of its own expansion.
+The result of the nested expansion is a list of all elements separated by commas.</p><p>Additionally, we add the pseudo-element <code>_number_of_elements</code> at the end of the enumeration to automatically count the number of elements in the enum.
+It is used as template parameter for <code>std::array</code>. If we would use C++17 class template argument deduction, we could omit the template parameter for <code>std::array</code> and would not need <code>_number_of_elements</code>.</p><p>At the end, we explicitly undefine the macro <code>X()</code>, so that we can define it in a different way for the string array.
+The initializer list for the array is generated similarly to the content of the enum.
+We define the macro <code>X()</code> before expanding <code>COLORS</code>.
+This time, we want to generate a string representation for each element.
+We convert the macro parameter to a string literal with the preprocessing operator <code>#</code> in front of the parameter, see <a href=https://gcc.gnu.org/onlinedocs/cpp/Stringizing.html#Stringizing>Stringizing</a>.
+It will generate strings in the same order as the enum.</p><h1 id=more-nesting>More Nesting</h1><p>Undefining and redefining the macro <code>X()</code> is a bit clunky.
+Ideally, we only want the list of elements and one macro to generate all the code for us.
+Something like this:</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=color:#66d9ef>struct</span> colors {
+<span style=color:#75715e>// list of elements
+</span><span style=color:#75715e></span><span style=color:#75715e>#define COLORS(X) \
+</span><span style=color:#75715e></span>	X(black)      \
+	X(white)      \
+	X(red)        \
+	X(blue)       \
+	X(green)
+
+DECLARE_ENUM(COLORS)
+};
+</code></pre></div><p>Notice that the list of elements <code>COLORS</code> now takes the macro <code>X()</code> as a parameter.
+This way, we do not have to undefine and redefine <code>X()</code>.
+We just pass a different macro to <code>COLORS</code>.
+The parameter is inserted into the macro body during expansion, replacing X, and then the nested expansion is triggered.
+The macro <code>DECLARE_ENUM()</code> hides most of the details.
+The definition is the following:</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=color:#75715e>#define  ENUM_MEMBER(element) element,
+</span><span style=color:#75715e>#define ARRAY_MEMBER(element) #element,
+</span><span style=color:#75715e></span>
+<span style=color:#75715e>#define DECLARE_ENUM(ELEMENTS)                                                   \
+</span><span style=color:#75715e></span>	<span style=color:#66d9ef>enum</span> enumeration {                                                           \
+		ELEMENTS(ENUM_MEMBER)                                                    \
+		_number_of_elements                                                      \
+	};                                                                           \
+	<span style=color:#66d9ef>static</span> <span style=color:#66d9ef>constexpr</span> std<span style=color:#f92672>::</span>array<span style=color:#f92672>&lt;</span><span style=color:#66d9ef>const</span> <span style=color:#66d9ef>char</span><span style=color:#f92672>*</span>,_number_of_elements<span style=color:#f92672>&gt;</span> names { \
+		ELEMENTS(ARRAY_MEMBER)                                                   \
+	};
+</code></pre></div><p>During the expansion of <code>DECLARE_ENUM()</code> two nested expansion are triggered one after the other.
+First, the list of elements <code>COLORS</code> is inserted into the enum and the array, replacing ELEMENTS.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++>	<span style=color:#66d9ef>enum</span> enumeration {
+		COLORS(ENUM_MEMBER)
+		_number_of_elements
+	};
+	<span style=color:#66d9ef>static</span> <span style=color:#66d9ef>constexpr</span> std<span style=color:#f92672>::</span>array<span style=color:#f92672>&lt;</span><span style=color:#66d9ef>const</span> <span style=color:#66d9ef>char</span><span style=color:#f92672>*</span>,_number_of_elements<span style=color:#f92672>&gt;</span> names {
+		COLORS(ARRAY_MEMBER)
+	};
+</code></pre></div><p>Next, the inserted <code>COLORS</code> is expanded in the enum, using <code>ENUM_MEMBER()</code> as the definition of X, and in the initializer list of the array, using <code>ARRAY_MEMBER()</code>.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++>	<span style=color:#66d9ef>enum</span> enumeration {
+		ENUM_MEMBER(black)
+		ENUM_MEMBER(white)
+		ENUM_MEMBER(red)
+		ENUM_MEMBER(blue)
+		ENUM_MEMBER(green)
+		_number_of_elements
+	};
+	<span style=color:#66d9ef>static</span> <span style=color:#66d9ef>constexpr</span> std<span style=color:#f92672>::</span>array<span style=color:#f92672>&lt;</span><span style=color:#66d9ef>const</span> <span style=color:#66d9ef>char</span><span style=color:#f92672>*</span>,_number_of_elements<span style=color:#f92672>&gt;</span> names {
+		ARRAY_MEMBER(black)
+		ARRAY_MEMBER(white)
+		ARRAY_MEMBER(red)
+		ARRAY_MEMBER(blue)
+		ARRAY_MEMBER(green)
+	};
+</code></pre></div><p>Finally, <code>ENUM_MEMBER()</code> and <code>ARRAY_MEMBER()</code> are expanded on each element of the list.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++>	<span style=color:#66d9ef>enum</span> enumeration {
+		black,
+		white,
+		red,
+		blue,
+		green,
+		_number_of_elements
+	};
+	<span style=color:#66d9ef>static</span> <span style=color:#66d9ef>constexpr</span> std<span style=color:#f92672>::</span>array<span style=color:#f92672>&lt;</span><span style=color:#66d9ef>const</span> <span style=color:#66d9ef>char</span><span style=color:#f92672>*</span>,_number_of_elements<span style=color:#f92672>&gt;</span> names {
+		<span style=color:#e6db74>&#34;black&#34;</span>,
+		<span style=color:#e6db74>&#34;white&#34;</span>,
+		<span style=color:#e6db74>&#34;red&#34;</span>,
+		<span style=color:#e6db74>&#34;blue&#34;</span>,
+		<span style=color:#e6db74>&#34;green&#34;</span>,
+	};
+</code></pre></div><h1 id=conclusion>Conclusion</h1><p>Defining the list of elements in a macro enclosed by yet another macro still feels a bit clunky.
+The benefit we get from all this is a single definition of the elements which makes it much more update friendly.
+No more forgotten updates!</p><p>I hope you do not get the impression that X-macros are limited to enums.
+I recently used X-macros to add a bit of metadata to classes and structures in such a way that I get a very simple compile-time reflection of their members.
+My list of elements were the members with their types.</p><p>See also wikibooks for <a href=https://en.wikibooks.org/wiki/C_Programming/Preprocessor#X-Macros>more examples</a>.</p><div class=footnotes><hr><ol><li id=fn:1>Parameters are macro-expanded at call side, see <a href=https://gcc.gnu.org/onlinedocs/cpp/Argument-Prescan.html#Argument-Prescan>Argument Prescan</a>.
+<a class=footnote-return href=#fnref:1><sup>[return]</sup></a></li></ol></div></article><div class=pagination><a href=/posts/identical-code-folding/ class="left arrow">&#8592; previous</a>
+<a href=# class=top>Top</a></div></main></div></body></html>
