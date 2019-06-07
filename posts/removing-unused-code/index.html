@@ -1,13 +1,15 @@
-<!doctype html><html><head><title>Removing Unused Code</title><link rel=stylesheet href=/css/style.css></head><body><nav class=header><div class=header-container><a href=/>Dangerous Assembly</a><div class=header-menu><a href=/publications/>publications</a>
+<!doctype html><html><head><title>Removing Unused Code</title><link rel=stylesheet href=/css/style.css></head><body><nav class=header><div class=header-container><a href=/>Dangerous Assembly</a><div class=header-menu><a href=/index.xml>RSS</a>
+<a href=https://github.com/tetzank/>github</a>
+<a href=/publications/>publications</a>
 <a href=/about/>about</a></div></div></nav><div id=content><main><article><header><time datetime="2019-01-05 23:25:03 &#43;0100 CET" class=catalogue-time>2019-01-05</time><h1>Removing Unused Code</h1><div class=post-line></div></header><aside><details><summary>Contents</summary><nav id=TableOfContents><ul><li><a href=#example-program>Example Program</a></li><li><a href=#inspecting-executable>Inspecting Executable</a></li><li><a href=#internal-linkage>Internal Linkage</a></li><li><a href=#garbage-collection-with-the-linker>Garbage Collection with the Linker</a></li><li><a href=#link-time-optimization>Link-Time Optimization</a></li><li><a href=#conclusion>Conclusion</a></li></ul></nav></details></aside><p>I recently went on a little journey to get a better understanding of the linker used in C++.
 Like many other C++ developers, my mental model of what the linker actually does is very limited.
 But I&rsquo;m always interested in learning new tricks about the tools I use regularly, especially new optimizations slumbering behind some obscure flag.
-In this post, we will have a look at the removal of unused functions from the executable and how the linker can help us with this task.</p><p>Wait a minute. In a well maintained project there shouldn&rsquo;t be any unused function, right?
+In this post, we will have a look at the removal of unused functions from the executable and how the linker can help us with this task.</p><p>Wait a minute. In a well-maintained project there shouldn&rsquo;t be any unused function, right?
 Well, it happens more often than you think that some function was left behind after some refactoring and nobody notices that it is not required anymore.
 And there&rsquo;s another important case: static linking.
 Usually a program which statically links another library is not using every function of the library.
-Only a subset of the functions are called.
-All other functions are unused.</p><p>Surprisingly, a lot of C++ developers assume that todays optimizing compilers just take care of it.
+Only a subset of the functions is called.
+All other functions are unused.</p><p>Surprisingly, a lot of C++ developers assume that today&rsquo;s optimizing compilers just take care of it.
 The compiler should be able to see that a function is never called and, therefore, exclude it from the executable.
 Let&rsquo;s put that to a test and see for ourselves.</p><h1 id=example-program>Example Program</h1><p>The following tiny C/C++ program shall be our test case.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>
 </span><span style=color:#75715e></span>
@@ -23,7 +25,7 @@ It just returns the return code of 0, nothing more.
 Obviously, the function <code>unused()</code> is never called.
 Let&rsquo;s compile it with optimizations turned on.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-bash data-lang=bash>$ g++ -O2 -march<span style=color:#f92672>=</span>native deadcode.cpp -o deadcode</code></pre></div><p>I will focus on &ldquo;standard&rdquo; tools running on Linux, mostly tools from GCC and binutils.
 You might get other results with different toolchains.
-I will usually check if clang+LLVM have a different behaviour and mention it, if they do.
+I will usually check if clang+LLVM have a different behavior and mention it, if they do.
 Here we use the C++ frontend <code>g++</code> of GCC.
 Compiling the program as C or C++ makes no real difference.</p><h1 id=inspecting-executable>Inspecting Executable</h1><p>Now that we have an executable, let&rsquo;s have a look if <code>unused()</code> survived all the optimization passes of the compiler and made its way into the executable.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-bash data-lang=bash>$ objdump -tC deadcode | grep <span style=color:#e6db74>&#39;unused&#39;</span>
 <span style=color:#ae81ff>0000000000001150</span> g     F .text  000000000000000c              unused<span style=color:#f92672>()</span></code></pre></div><p><code>objdump</code> should be your goto tool if you want to inspect an executable.
@@ -37,7 +39,7 @@ The answer is simple: it can&rsquo;t.
 We did not provide enough information to the compiler.
 For example, we know that there is just one .cpp-file and that we link it to a final program and not a library.
 Both things we did not tell the compiler explicitly.
-It gets more clear when we expand the one-liner we used for compilation to the commands which get run (simplified, pass <code>-v</code> to see the real commands).</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-bash data-lang=bash>$ g++ -O2 -march<span style=color:#f92672>=</span>native deadcode.cpp -o deadcode.o
+It gets clearer when we expand the one-liner we used for compilation to the commands which get run (simplified, pass <code>-v</code> to see the real commands).</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-bash data-lang=bash>$ g++ -O2 -march<span style=color:#f92672>=</span>native deadcode.cpp -o deadcode.o
 $ g++ deadcode.o -o deadcode</code></pre></div><p>First, all .cpp-files are compiled to object files, isolated from each other in their own process.
 Afterwards, all object files are linked together to the executable.
 The function <code>unused()</code> in deadcode.cpp has <a href=https://en.cppreference.com/w/cpp/language/storage_duration#Linkage>external linkage</a>.
@@ -73,7 +75,7 @@ Putting every function in its own section adds quite some size overhead to the e
 In case of static linking, the static library has to be compiled with <code>-ffunction-sections</code> too.</p><h1 id=link-time-optimization>Link-Time Optimization</h1><p>As we learned, the linker is in a nice position to see every part of a program.
 Many optimization passes, not just dead code elimination, benefit from a bigger picture of the program.
 Therefore, modern compilers and linkers provide link-time optimization (LTO).</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-bash data-lang=bash>$ g++ -O2 -march<span style=color:#f92672>=</span>native -flto deadcode.cpp -o deadcode</code></pre></div><p><code>-flto</code> lets the compiler and its optimization passes see the whole program during linking.
-It sees that <code>unused()</code> is not called in any .cpp-file and removes it as dead code even with external linkage.</p><p>Same as before, static libraries have to compiled with LTO enabled, otherwise the compiler cannot reason about it and remove unused code.
+It sees that <code>unused()</code> is not called in any .cpp-file and removes it as dead code even with external linkage.</p><p>Same as before, static libraries have to be compiled with LTO enabled, otherwise the compiler cannot reason about it and remove unused code.
 But the main problem of LTO hindering its widespread adoption is high memory consumption and increased compilation time.
 The sequential step of linking is now also used to run optimization passes on bigger parts of the program.
 Linking is not trivially parallelizable like compiling .cpp-files to object files.
@@ -81,4 +83,4 @@ Both, GCC and LLVM are working on improving scalability of LTO, e.g., LLVM with 
 It is not done by simply enabling optimizations.
 LTO is the best variant in my opinion as it also enables a lot of other optimizations to be applied to your whole program.
 If you can tolerate the scalability issues of the compilation, LTO is the way to go.</p></article><div class=pagination><a href=# class=top>Top</a>
-<a href=/posts/identical-code-folding/ class="right arrow">next &#8594;</a></div></main></div></body></html>
+<a href=https://tetzank.github.io/posts/identical-code-folding/ class="right arrow">next &#8594;</a></div></main></div></body></html>

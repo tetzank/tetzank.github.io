@@ -1,7 +1,9 @@
-<!doctype html><html><head><title>X-Macros</title><link rel=stylesheet href=/css/style.css></head><body><nav class=header><div class=header-container><a href=/>Dangerous Assembly</a><div class=header-menu><a href=/publications/>publications</a>
+<!doctype html><html><head><title>X-Macros</title><link rel=stylesheet href=/css/style.css></head><body><nav class=header><div class=header-container><a href=/>Dangerous Assembly</a><div class=header-menu><a href=/index.xml>RSS</a>
+<a href=https://github.com/tetzank/>github</a>
+<a href=/publications/>publications</a>
 <a href=/about/>about</a></div></div></nav><div id=content><main><article><header><time datetime="2019-04-23 16:34:00 &#43;0200 CEST" class=catalogue-time>2019-04-23</time><h1>X-Macros</h1><div class=post-line></div></header><aside><details><summary>Contents</summary><nav id=TableOfContents><ul><li><a href=#a-macro-is-not-a-function>A Macro is not a Function</a></li><li><a href=#nested-expansions>Nested Expansions</a></li><li><a href=#more-nesting>More Nesting</a></li><li><a href=#conclusion>Conclusion</a></li></ul></nav></details></aside><p>A lot of C++ developers try to avoid preprocessor macros like the plague.
 There are genuine reasons for that.
-Macros might look like functions but they behave differently, resulting in confusing bugs when not treated carefully.
+Macros might look like functions, but they behave differently, resulting in confusing bugs when not treated carefully.
 But even in modern C++, macros still have their use cases.
 In this post, I want to talk about a special kind of macro called X-macro which is mostly used to generate various code fragments from a single list of elements.</p><h1 id=a-macro-is-not-a-function>A Macro is not a Function</h1><p>When I started developing in C/C++, I used macros as constants and small inlined functions.
 This works for simple expressions, if one writes the macro carefully, but not for code fragments consisting of multiple statements.
@@ -12,12 +14,12 @@ What could possibly go wrong?
 Well, a lot actually.
 What is the result of <code>SQUARE(i+1)</code>?</p><p>In a function call, the expression <code>i+1</code> is evaluated at the call side and the resulting value passed as parameter to the function.
 Call-side evaluation of parameters is not happening for macros.<sup class=footnote-ref id=fnref:1><a href=#fn:1>1</a></sup>
-The whole parameter expression is inserted everywhere the parameter is used in the macro definition, resulting in <code>i+1 * i+1</code> which is not what we intented to calculate.
+The whole parameter expression is inserted everywhere the parameter is used in the macro definition, resulting in <code>i+1 * i+1</code> which is not what we intended to calculate.
 Operator precedence gets in our way.
 The fix is obvious: put everything in parentheses!</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=color:#75715e>#define SQUARE(expr) ((expr) * (expr))
 </span></code></pre></div><p>The reason for this behavior is easy to understand: the preprocessor does not know anything about the semantics of the expressions.
 Basically, it just copies text around following its expansion rules, not knowing what the text means and if the assembled code makes any sense for the following compilation step.
-This separation of concerns keeps tools simple, but can lead to unexpected pitfalls.
+This separation of concerns keeps tools simple, but it can lead to unexpected pitfalls.
 If you feel curious about other common problems, you can check out the <a href=https://gcc.gnu.org/onlinedocs/cpp/Macro-Pitfalls.html#Macro-Pitfalls>&lsquo;Macro Pitfalls&rsquo;</a> section in the documentation.</p><p>I do not use macros as inlined functions anymore.
 A normal function has way less surprises in store than a macro.
 The compiler is usually also better at deciding when to inline a function call.
@@ -138,6 +140,6 @@ First, the list of elements <code>COLORS</code> is inserted into the enum and th
 The benefit we get from all this is a single definition of the elements which makes it much more update friendly.
 No more forgotten updates!</p><p>I hope you do not get the impression that X-macros are limited to enums.
 I recently used X-macros to add a bit of metadata to classes and structures in such a way that I get a very simple compile-time reflection of their members.
-My list of elements were the members with their types.</p><p>See also wikibooks for <a href=https://en.wikibooks.org/wiki/C_Programming/Preprocessor#X-Macros>more examples</a>.</p><div class=footnotes><hr><ol><li id=fn:1>Parameters are macro-expanded at call side, see <a href=https://gcc.gnu.org/onlinedocs/cpp/Argument-Prescan.html#Argument-Prescan>Argument Prescan</a>.
-<a class=footnote-return href=#fnref:1><sup>[return]</sup></a></li></ol></div></article><div class=pagination><a href=/posts/identical-code-folding/ class="left arrow">&#8592; previous</a>
+My list of elements was the members with their types.</p><p>See also wikibooks for <a href=https://en.wikibooks.org/wiki/C_Programming/Preprocessor#X-Macros>more examples</a>.</p><div class=footnotes><hr><ol><li id=fn:1>Parameters are macro-expanded at call side, see <a href=https://gcc.gnu.org/onlinedocs/cpp/Argument-Prescan.html#Argument-Prescan>Argument Prescan</a>.
+<a class=footnote-return href=#fnref:1><sup>[return]</sup></a></li></ol></div></article><div class=pagination><a href=https://tetzank.github.io/posts/identical-code-folding/ class="left arrow">&#8592; previous</a>
 <a href=# class=top>Top</a></div></main></div></body></html>
