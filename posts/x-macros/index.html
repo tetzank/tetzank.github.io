@@ -7,8 +7,8 @@ Macros might look like functions, but they behave differently, resulting in conf
 But even in modern C++, macros still have their use cases.
 In this post, I want to talk about a special kind of macro called X-macro which is mostly used to generate various code fragments from a single list of elements.</p><h1 id=a-macro-is-not-a-function>A Macro is not a Function</h1><p>When I started developing in C/C++, I used macros as constants and small inlined functions.
 This works for simple expressions, if one writes the macro carefully, but not for code fragments consisting of multiple statements.
-Here is a simple expression macro squaring a passed value:</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=color:#75715e>#define SQUARE(value) value * value
-</span></code></pre></div><p>The macro is expanded to the passed value multiplied by itself.
+Here is a simple expression macro squaring a passed value:</p><pre><code>#define SQUARE(value) value * value
+</code></pre><p>The macro is expanded to the passed value multiplied by itself.
 Looks easy enough.
 What could possibly go wrong?
 Well, a lot actually.
@@ -16,8 +16,8 @@ What is the result of <code>SQUARE(i+1)</code>?</p><p>In a function call, the ex
 Call-side evaluation of parameters is not happening for macros.<sup class=footnote-ref id=fnref:1><a href=#fn:1>1</a></sup>
 The whole parameter expression is inserted everywhere the parameter is used in the macro definition, resulting in <code>i+1 * i+1</code> which is not what we intended to calculate.
 Operator precedence gets in our way.
-The fix is obvious: put everything in parentheses!</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=color:#75715e>#define SQUARE(expr) ((expr) * (expr))
-</span></code></pre></div><p>The reason for this behavior is easy to understand: the preprocessor does not know anything about the semantics of the expressions.
+The fix is obvious: put everything in parentheses!</p><pre><code>#define SQUARE(expr) ((expr) * (expr))
+</code></pre><p>The reason for this behavior is easy to understand: the preprocessor does not know anything about the semantics of the expressions.
 Basically, it just copies text around following its expansion rules, not knowing what the text means and if the assembled code makes any sense for the following compilation step.
 This separation of concerns keeps tools simple, but it can lead to unexpected pitfalls.
 If you feel curious about other common problems, you can check out the <a href=https://gcc.gnu.org/onlinedocs/cpp/Macro-Pitfalls.html#Macro-Pitfalls>&lsquo;Macro Pitfalls&rsquo;</a> section in the documentation.</p><p>I do not use macros as inlined functions anymore.

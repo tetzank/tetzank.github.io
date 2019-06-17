@@ -37,15 +37,17 @@ To make this clearer, let us take a small detour and look at the following examp
 </span><span style=color:#75715e></span>	foo_second(); <span style=color:#75715e>//
 </span><span style=color:#75715e></span>	<span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
 }
-</code></pre></div></p><p>The program output varies depending on which order the linker gets to know the symbols.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-bash data-lang=bash>$ g++ main.cpp first.cpp second.cpp -o main <span style=color:#f92672>&amp;&amp;</span> ./main
+</code></pre></div></p><p>The program output varies depending on which order the linker gets to know the symbols.</p><pre><code>$ g++ main.cpp first.cpp second.cpp -o main &amp;&amp; ./main
 test in first.cpp called
 test in first.cpp called
-$ g++ main.cpp second.cpp first.cpp -o main <span style=color:#f92672>&amp;&amp;</span> ./main
+$ g++ main.cpp second.cpp first.cpp -o main &amp;&amp; ./main
 test in second.cpp called
-test in second.cpp called</code></pre></div><p>If we turn on optimizations, the call to <code>test()</code> in <code>foo_first()</code> and <code>foo_second()</code> gets inlined, picking <code>test()</code> from the same file.
-Hence, we get the expected output.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-bash data-lang=bash>$ g++ -O2 main.cpp first.cpp second.cpp -o main <span style=color:#f92672>&amp;&amp;</span> ./main
+test in second.cpp called
+</code></pre><p>If we turn on optimizations, the call to <code>test()</code> in <code>foo_first()</code> and <code>foo_second()</code> gets inlined, picking <code>test()</code> from the same file.
+Hence, we get the expected output.</p><pre><code>$ g++ -O2 main.cpp first.cpp second.cpp -o main &amp;&amp; ./main
 test in first.cpp called
-test in second.cpp called</code></pre></div><p>As with other classes and functions, never have different implementations with the same name.
+test in second.cpp called
+</code></pre><p>As with other classes and functions, never have different implementations with the same name.
 Normally, you get a linker error (multiple definitions), but not for templates.</p><h1 id=consolidating-independent-member-functions>Consolidating Independent Member Functions</h1><p>Template instances with the same parameters are fine.
 The linker makes sure that there will be only one function in the executable.
 But what about different parameters?
@@ -95,37 +97,41 @@ On the other hand, <code>operator[]()</code> depends on the template parameter <
 Both member functions are marked with the attribute <code>noinline</code> which prevents inlining.
 Let us assume these functions are big and used at various places throughout the program such that the inliner does not inline the calls.
 The code inside of <code>main</code> is not important.
-It makes use of both member functions and instantiates the template for <code>int</code> and <code>float</code>.</p><p>Let us compile and have a look at the functions in the resulting executable.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-bash data-lang=bash>$ g++ myarray.cpp -o myarray
-$ objdump -tC ./myarray | grep <span style=color:#e6db74>&#39;MyArray&#39;</span>
-000000000000125c  w    F .text  <span style=color:#ae81ff>0000000000000023</span>              MyArray&lt;int, <span style=color:#ae81ff>1024</span>&gt;::operator<span style=color:#f92672>[](</span>unsigned int<span style=color:#f92672>)</span>
-<span style=color:#ae81ff>0000000000001244</span>  w    F .text  <span style=color:#ae81ff>0000000000000017</span>              MyArray&lt;float, <span style=color:#ae81ff>1024</span>&gt;::setMetaData<span style=color:#f92672>(</span>int<span style=color:#f92672>)</span>
-000000000000122c  w    F .text  <span style=color:#ae81ff>0000000000000017</span>              MyArray&lt;int, <span style=color:#ae81ff>1024</span>&gt;::setMetaData<span style=color:#f92672>(</span>int<span style=color:#f92672>)</span>
-<span style=color:#ae81ff>0000000000001280</span>  w    F .text  <span style=color:#ae81ff>0000000000000023</span>              MyArray&lt;float, <span style=color:#ae81ff>1024</span>&gt;::operator<span style=color:#f92672>[](</span>unsigned int<span style=color:#f92672>)</span></code></pre></div><p>As we expected, every member function gets instantiated per template parameter.
-Now, let us see if optimizations make a difference.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-bash data-lang=bash>$ g++ -O2 -march<span style=color:#f92672>=</span>native myarray.cpp -o myarray
-$ objdump -tC ./myarray | grep <span style=color:#e6db74>&#39;MyArray&#39;</span>
-00000000000011f0 l     F .text  <span style=color:#ae81ff>0000000000000003</span>              MyArray&lt;int, <span style=color:#ae81ff>1024</span>&gt;::setMetaData<span style=color:#f92672>(</span>int<span style=color:#f92672>)</span> <span style=color:#f92672>[</span>clone .isra.0<span style=color:#f92672>]</span>
-00000000000011f0 l     F .text  <span style=color:#ae81ff>0000000000000003</span>              MyArray&lt;float, <span style=color:#ae81ff>1024</span>&gt;::setMetaData<span style=color:#f92672>(</span>int<span style=color:#f92672>)</span> <span style=color:#f92672>[</span>clone .isra.1<span style=color:#f92672>]</span>
-<span style=color:#ae81ff>0000000000001200</span>  w    F .text  <span style=color:#ae81ff>0000000000000008</span>              MyArray&lt;int, <span style=color:#ae81ff>1024</span>&gt;::operator<span style=color:#f92672>[](</span>unsigned int<span style=color:#f92672>)</span>
-<span style=color:#ae81ff>0000000000001210</span>  w    F .text  <span style=color:#ae81ff>0000000000000008</span>              MyArray&lt;float, <span style=color:#ae81ff>1024</span>&gt;::operator<span style=color:#f92672>[](</span>unsigned int<span style=color:#f92672>)</span></code></pre></div><p>If we look carefully (ignoring the different order), we notice that the first column is now the same for the two instances of <code>setMetaData()</code>.
+It makes use of both member functions and instantiates the template for <code>int</code> and <code>float</code>.</p><p>Let us compile and have a look at the functions in the resulting executable.</p><pre><code>$ g++ myarray.cpp -o myarray
+$ objdump -tC ./myarray | grep 'MyArray'
+000000000000125c  w    F .text  0000000000000023              MyArray&lt;int, 1024&gt;::operator[](unsigned int)
+0000000000001244  w    F .text  0000000000000017              MyArray&lt;float, 1024&gt;::setMetaData(int)
+000000000000122c  w    F .text  0000000000000017              MyArray&lt;int, 1024&gt;::setMetaData(int)
+0000000000001280  w    F .text  0000000000000023              MyArray&lt;float, 1024&gt;::operator[](unsigned int)
+</code></pre><p>As we expected, every member function gets instantiated per template parameter.
+Now, let us see if optimizations make a difference.</p><pre><code>$ g++ -O2 -march=native myarray.cpp -o myarray
+$ objdump -tC ./myarray | grep 'MyArray'
+00000000000011f0 l     F .text  0000000000000003              MyArray&lt;int, 1024&gt;::setMetaData(int) [clone .isra.0]
+00000000000011f0 l     F .text  0000000000000003              MyArray&lt;float, 1024&gt;::setMetaData(int) [clone .isra.1]
+0000000000001200  w    F .text  0000000000000008              MyArray&lt;int, 1024&gt;::operator[](unsigned int)
+0000000000001210  w    F .text  0000000000000008              MyArray&lt;float, 1024&gt;::operator[](unsigned int)
+</code></pre><p>If we look carefully (ignoring the different order), we notice that the first column is now the same for the two instances of <code>setMetaData()</code>.
 This is the address of the function in the executable.
 <code>-O2</code> enables <code>-fipa-icf</code><sup class=footnote-ref id=fnref:1><a href=#fn:1>1</a></sup> which folds the two instances of <code>setMetaData()</code> to one single function, but the symbols remain.
 So, we are still littering the symbol table but at least the identical code is shared now.</p><p>The optimizations did not help for <code>operator[]()</code>.
 The code is still not shared.
 Maybe the assumption, that the code is identical, is not correct.
 We can disassemble the code with <code>objdump -DC</code> and search for the functions.
-Another option is to use <code>gdb</code> and its <code>disassemble</code> command, but we have to use mangled names.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-bash data-lang=bash>$ gdb -nx -batch -ex <span style=color:#e6db74>&#39;disassemble _ZN7MyArrayIfLi1024EEixEj&#39;</span> ./myarray</code></pre></div><p>If we enable debug information during compilation, we can also use function signatures<sup class=footnote-ref id=fnref:2><a href=#fn:2>2</a></sup>.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-bash data-lang=bash>$ g++ -g -O2 -march<span style=color:#f92672>=</span>native myarray.cpp -o myarray
-$ gdb -nx -batch -ex <span style=color:#e6db74>&#39;disassemble MyArray&lt;int,1024&gt;::operator[](unsigned)&#39;</span> ./myarray 
-Dump of assembler code <span style=color:#66d9ef>for</span> <span style=color:#66d9ef>function</span> MyArray&lt;int, <span style=color:#ae81ff>1024</span>&gt;::operator<span style=color:#f92672>[](</span>unsigned int<span style=color:#f92672>)</span>:
+Another option is to use <code>gdb</code> and its <code>disassemble</code> command, but we have to use mangled names.</p><pre><code>$ gdb -nx -batch -ex 'disassemble _ZN7MyArrayIfLi1024EEixEj' ./myarray
+</code></pre><p>If we enable debug information during compilation, we can also use function signatures<sup class=footnote-ref id=fnref:2><a href=#fn:2>2</a></sup>.</p><pre><code>$ g++ -g -O2 -march=native myarray.cpp -o myarray
+$ gdb -nx -batch -ex 'disassemble MyArray&lt;int,1024&gt;::operator[](unsigned)' ./myarray 
+Dump of assembler code for function MyArray&lt;int, 1024&gt;::operator[](unsigned int):
    0x0000000000001200 &lt;+0&gt;:     mov    %esi,%esi
-   0x0000000000001202 &lt;+2&gt;:     lea    0x4<span style=color:#f92672>(</span>%rdi,%rsi,4<span style=color:#f92672>)</span>,%rax
+   0x0000000000001202 &lt;+2&gt;:     lea    0x4(%rdi,%rsi,4),%rax
    0x0000000000001207 &lt;+7&gt;:     retq   
 End of assembler dump.
-$ gdb -nx -batch -ex <span style=color:#e6db74>&#39;disassemble MyArray&lt;float,1024&gt;::operator[](unsigned)&#39;</span> ./myarray
-Dump of assembler code <span style=color:#66d9ef>for</span> <span style=color:#66d9ef>function</span> MyArray&lt;float, <span style=color:#ae81ff>1024</span>&gt;::operator<span style=color:#f92672>[](</span>unsigned int<span style=color:#f92672>)</span>:
+$ gdb -nx -batch -ex 'disassemble MyArray&lt;float,1024&gt;::operator[](unsigned)' ./myarray
+Dump of assembler code for function MyArray&lt;float, 1024&gt;::operator[](unsigned int):
    0x0000000000001210 &lt;+0&gt;:     mov    %esi,%esi
-   0x0000000000001212 &lt;+2&gt;:     lea    0x4<span style=color:#f92672>(</span>%rdi,%rsi,4<span style=color:#f92672>)</span>,%rax
+   0x0000000000001212 &lt;+2&gt;:     lea    0x4(%rdi,%rsi,4),%rax
    0x0000000000001217 &lt;+7&gt;:     retq   
-End of assembler dump.</code></pre></div><p>Even if you cannot read x86 assembly, you can clearly see that these two functions are identical.</p><h1 id=consolidating-identical-instances>Consolidating Identical Instances</h1><p>If we look closely at <code>MyArray</code> and how it uses the template parameter <code>T</code>, we will notice that it treats it as a black box.
+End of assembler dump.
+</code></pre><p>Even if you cannot read x86 assembly, you can clearly see that these two functions are identical.</p><h1 id=consolidating-identical-instances>Consolidating Identical Instances</h1><p>If we look closely at <code>MyArray</code> and how it uses the template parameter <code>T</code>, we will notice that it treats it as a black box.
 It does not apply any operation on the type.
 An array of elements is stored in <code>data</code> and accessed by <code>operator[]()</code>.
 Only the size of <code>T</code> makes a difference.
@@ -165,23 +171,26 @@ We can reimplement <code>MyArray</code> to make this more explicit.</p><div clas
 It gets the size of an element and the number of elements passed as template parameters.
 <code>MyArray</code> acts as a decorator to still provide type safety.
 It just forwards all calls to <code>MyArrayImpl</code> and reinterprets the stored bytes to the correct type.
-The code in <code>main</code> does not need to be changed.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-bash data-lang=bash>$ g++ -O2 -march<span style=color:#f92672>=</span>native myarray2.cpp -o myarray2
-$ objdump -tC ./myarray2 | grep <span style=color:#e6db74>&#39;MyArray&#39;</span>
-00000000000011f0 l     F .text  <span style=color:#ae81ff>0000000000000003</span>              MyArrayImpl&lt;<span style=color:#ae81ff>4</span>, <span style=color:#ae81ff>1024</span>&gt;::setMetaData<span style=color:#f92672>(</span>int<span style=color:#f92672>)</span> <span style=color:#f92672>[</span>clone .isra.0<span style=color:#f92672>]</span>
-<span style=color:#ae81ff>0000000000001200</span>  w    F .text  <span style=color:#ae81ff>0000000000000009</span>              MyArrayImpl&lt;<span style=color:#ae81ff>4</span>, <span style=color:#ae81ff>1024</span>&gt;::operator<span style=color:#f92672>[](</span>unsigned int<span style=color:#f92672>)</span></code></pre></div><p>The member functions in <code>MyArray</code> get inlined as they are just forwarding.
+The code in <code>main</code> does not need to be changed.</p><pre><code>$ g++ -O2 -march=native myarray2.cpp -o myarray2
+$ objdump -tC ./myarray2 | grep 'MyArray'
+00000000000011f0 l     F .text  0000000000000003              MyArrayImpl&lt;4, 1024&gt;::setMetaData(int) [clone .isra.0]
+0000000000001200  w    F .text  0000000000000009              MyArrayImpl&lt;4, 1024&gt;::operator[](unsigned int)
+</code></pre><p>The member functions in <code>MyArray</code> get inlined as they are just forwarding.
 <code>MyArrayImpl</code> only gets instantiated once with size of 4 as <code>int</code> and <code>float</code> have the same size.</p><p>This is not an ideal solution.
 Not every container can treat its elements as black boxes, e.g., containers storing elements in a specific order to provide faster search need to compare elements.
 It gets hard to identify groups of types which behave identical considering the applied operations.
 An automatic solution would be much appreciated.</p><p>The linker to the rescue!
 When studying the manpage of GCC and its flag <code>-fipa-icf</code>, one gets to know that the gold linker has a similar optimization pass providing ICF.
-Time to put it to a test.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-bash data-lang=bash>$ g++ -O2 -march<span style=color:#f92672>=</span>native -ffunction-sections -fuse-ld<span style=color:#f92672>=</span>gold -Wl,--icf<span style=color:#f92672>=</span>all myarray.cpp -o myarray</code></pre></div><p>The linker only works on the level of sections which means we have to put every function in its own section with the flag <code>-ffunction-sections</code>.
+Time to put it to a test.</p><pre><code>$ g++ -O2 -march=native -ffunction-sections -fuse-ld=gold -Wl,--icf=all myarray.cpp -o myarray
+</code></pre><p>The linker only works on the level of sections which means we have to put every function in its own section with the flag <code>-ffunction-sections</code>.
 Then, we have to use <code>ld.gold</code> as linker instead of the default <code>ld</code>.
 The flag <code>-fuse-ld=gold</code> changes the linker to gold.
-To enable the ICF pass, we pass <code>--icf=all</code> to the linker with the <code>-Wl,&lt;linker-flag&gt;</code> flag.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-bash data-lang=bash>$ objdump -tC ./myarray | grep <span style=color:#e6db74>&#39;MyArray&#39;</span>
-<span style=color:#ae81ff>0000000000000730</span> l     F .text  <span style=color:#ae81ff>0000000000000003</span>              MyArray&lt;int, <span style=color:#ae81ff>1024</span>&gt;::setMetaData<span style=color:#f92672>(</span>int<span style=color:#f92672>)</span> <span style=color:#f92672>[</span>clone .isra.0<span style=color:#f92672>]</span>
-<span style=color:#ae81ff>0000000000000730</span> l     F .text  <span style=color:#ae81ff>0000000000000003</span>              MyArray&lt;float, <span style=color:#ae81ff>1024</span>&gt;::setMetaData<span style=color:#f92672>(</span>int<span style=color:#f92672>)</span> <span style=color:#f92672>[</span>clone .isra.1<span style=color:#f92672>]</span>
-<span style=color:#ae81ff>0000000000000740</span>  w    F .text  <span style=color:#ae81ff>0000000000000008</span>              MyArray&lt;int, <span style=color:#ae81ff>1024</span>&gt;::operator<span style=color:#f92672>[](</span>unsigned int<span style=color:#f92672>)</span>
-<span style=color:#ae81ff>0000000000000740</span>  w    F .text  <span style=color:#ae81ff>0000000000000008</span>              MyArray&lt;float, <span style=color:#ae81ff>1024</span>&gt;::operator<span style=color:#f92672>[](</span>unsigned int<span style=color:#f92672>)</span></code></pre></div><p>Finally, we get the result we were looking for without modifications of the source code.
+To enable the ICF pass, we pass <code>--icf=all</code> to the linker with the <code>-Wl,&lt;linker-flag&gt;</code> flag.</p><pre><code>$ objdump -tC ./myarray | grep 'MyArray'
+0000000000000730 l     F .text  0000000000000003              MyArray&lt;int, 1024&gt;::setMetaData(int) [clone .isra.0]
+0000000000000730 l     F .text  0000000000000003              MyArray&lt;float, 1024&gt;::setMetaData(int) [clone .isra.1]
+0000000000000740  w    F .text  0000000000000008              MyArray&lt;int, 1024&gt;::operator[](unsigned int)
+0000000000000740  w    F .text  0000000000000008              MyArray&lt;float, 1024&gt;::operator[](unsigned int)
+</code></pre><p>Finally, we get the result we were looking for without modifications of the source code.
 Again, the symbol table still contains all instances, but they point to shared code.</p><p>This also works with optimizations turned off for GCC.
 The gold linker fixes it all up for us, but it introduces a small size overhead in the executable as we have to put every function in its own section with <code>-ffunction-sections</code>.
 The gold linker can also be used for clang which does not provide any optimization pass itself for folding identical code.</p><h1 id=conclusion>Conclusion</h1><p>GCC with <code>-O2</code> can fold member functions which are independent of the template parameters to a single implementation.
