@@ -37,12 +37,12 @@ It would be nice to have just one list of elements and generate the enum and arr
 X-macros can help us here.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=color:#66d9ef>struct</span> colors {
 	<span style=color:#75715e>// list of elements
 </span><span style=color:#75715e></span>	<span style=color:#75715e>#define COLORS \
-</span><span style=color:#75715e></span>		X(black)   \
-		X(white)   \
-		X(red)     \
-		X(blue)    \
-		X(green)
-
+</span><span style=color:#75715e>		X(black)   \
+</span><span style=color:#75715e>		X(white)   \
+</span><span style=color:#75715e>		X(red)     \
+</span><span style=color:#75715e>		X(blue)    \
+</span><span style=color:#75715e>		X(green)
+</span><span style=color:#75715e></span>
 	<span style=color:#75715e>// put each element into the enum
 </span><span style=color:#75715e></span>	<span style=color:#66d9ef>enum</span> enumeration {
 		<span style=color:#75715e>#define X(color) color,
@@ -74,12 +74,12 @@ Ideally, we only want the list of elements and one macro to generate all the cod
 Something like this:</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=color:#66d9ef>struct</span> colors {
 <span style=color:#75715e>// list of elements
 </span><span style=color:#75715e></span><span style=color:#75715e>#define COLORS(X) \
-</span><span style=color:#75715e></span>	X(black)      \
-	X(white)      \
-	X(red)        \
-	X(blue)       \
-	X(green)
-
+</span><span style=color:#75715e>	X(black)      \
+</span><span style=color:#75715e>	X(white)      \
+</span><span style=color:#75715e>	X(red)        \
+</span><span style=color:#75715e>	X(blue)       \
+</span><span style=color:#75715e>	X(green)
+</span><span style=color:#75715e></span>
 DECLARE_ENUM(COLORS)
 };
 </code></pre></div><p>Notice that the list of elements <code>COLORS</code> now takes the macro <code>X()</code> as a parameter.
@@ -91,14 +91,14 @@ The definition is the following:</p><div class=highlight><pre style=color:#f8f8f
 </span><span style=color:#75715e>#define ARRAY_MEMBER(element) #element,
 </span><span style=color:#75715e></span>
 <span style=color:#75715e>#define DECLARE_ENUM(ELEMENTS)                                                   \
-</span><span style=color:#75715e></span>	<span style=color:#66d9ef>enum</span> enumeration {                                                           \
-		ELEMENTS(ENUM_MEMBER)                                                    \
-		_number_of_elements                                                      \
-	};                                                                           \
-	<span style=color:#66d9ef>static</span> <span style=color:#66d9ef>constexpr</span> std<span style=color:#f92672>::</span>array<span style=color:#f92672>&lt;</span><span style=color:#66d9ef>const</span> <span style=color:#66d9ef>char</span><span style=color:#f92672>*</span>,_number_of_elements<span style=color:#f92672>&gt;</span> names { \
-		ELEMENTS(ARRAY_MEMBER)                                                   \
-	};
-</code></pre></div><p>During the expansion of <code>DECLARE_ENUM()</code> two nested expansion are triggered one after the other.
+</span><span style=color:#75715e>	enum enumeration {                                                           \
+</span><span style=color:#75715e>		ELEMENTS(ENUM_MEMBER)                                                    \
+</span><span style=color:#75715e>		_number_of_elements                                                      \
+</span><span style=color:#75715e>	};                                                                           \
+</span><span style=color:#75715e>	static constexpr std::array&lt;const char*,_number_of_elements&gt; names { \
+</span><span style=color:#75715e>		ELEMENTS(ARRAY_MEMBER)                                                   \
+</span><span style=color:#75715e>	};
+</span></code></pre></div><p>During the expansion of <code>DECLARE_ENUM()</code> two nested expansions are triggered one after the other.
 First, the list of elements <code>COLORS</code> is inserted into the enum and the array, replacing ELEMENTS.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++>	<span style=color:#66d9ef>enum</span> enumeration {
 		COLORS(ENUM_MEMBER)
 		_number_of_elements
