@@ -1,0 +1,119 @@
+<!doctype html><html><head><title>Record And Replay</title><link rel=stylesheet href=/css/style.css></head><body><nav class=header><div class=header-container><a href=/>Dangerous Assembly</a><div class=header-menu><a href=/index.xml>RSS</a>
+<a href=https://github.com/tetzank/>github</a>
+<a href=/publications/>publications</a>
+<a href=/about/>about</a></div></div></nav><div id=content><main><article><header><time datetime="2019-08-31 19:53:49 &#43;0200 CEST" class=catalogue-time>2019-08-31</time><h1>Record And Replay</h1><div class=post-line></div></header><aside><details><summary>Contents</summary><nav id=TableOfContents><ul><li><a href=#support-in-gdb>Support in GDB</a></li><li><a href=#the-rr-project>The RR-Project</a></li><li><a href=#conclusion>Conclusion</a></li></ul></nav></details></aside><p>Developers spent a significant percentage of their working time debugging their code.
+A fact many people do not really like to acknowledge as it feels like being unproductive.
+Software is complex.
+One usually does not get it right the first time.
+Therefore, it is very important to have good debugging tools supporting the developer in his quest to find the root cause of the issue.
+Being able to step backwards in the program execution helps tremendously as we can retrace the execution flow from the crash or assertion failure back to the operation which corrupted the program state.</p><h1 id=support-in-gdb>Support in GDB</h1><p>GDB has built-in support for recording the execution flow and reversible debugging.
+Let us look at the following tiny program to learn the basic commands and get a feeling where reversible debugging might be helpful.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C data-lang=C><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stddef.h&gt;</span><span style=color:#75715e>
+</span><span style=color:#75715e></span>
+<span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>(){
+	<span style=color:#66d9ef>long</span> array[<span style=color:#ae81ff>32</span>];
+
+	<span style=color:#66d9ef>for</span>(size_t i<span style=color:#f92672>=</span><span style=color:#ae81ff>0</span>; i<span style=color:#f92672>&lt;</span><span style=color:#66d9ef>sizeof</span>(array); i<span style=color:#f92672>++</span>){
+		array[i] <span style=color:#f92672>=</span> i;
+	}
+
+	<span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+}</code></pre></div><p>This program does not compute anything at all but it has a simple bug which illustrates the benefits of being able to step backwards in the program execution flow.
+We compile it with the following command.</p><pre><code>$ gcc -g -static -fno-stack-protector bug.c -o bug
+</code></pre><p>We use <code>-g</code> to enable debug information, <code>-static</code> to build a static executable without any links to shared libraries like the libc, and <code>-fno-stack-protector</code> to disable any stack protection the compiler might add by default.
+Some linux distributions enable stack protection by default to any compilation done on the platform.
+We want to keep it simple which is why we disable it.</p><p>The <code>-static</code> is only necessary to work around a current limitation of GDB.
+The resolver of dynamic symbols from shared libraries uses an instruction which is currently unsupported by the recording facilities in GDB.
+A limitation which is hopefully fixed in future versions of GDB.</p><p>Now that we dealt with the compilation, let&rsquo;s start GDB and the recording.</p><pre><code>$ gdb ./bug
+
+-- snip --
+
+(gdb) start
+Temporary breakpoint 2 at 0x401bc0: file bug.c, line 25.
+Starting program: /home/franky/programming/github/homepage/code/record-and-replay/bug 
+
+Temporary breakpoint 2, main () at bug.c:25
+25              for(size_t i=0; i&lt;sizeof(array); i++){
+(gdb) record
+(gdb) c
+Continuing.
+
+[1]+  Stopped                 gdb ./bug
+</code></pre><p>Recording can only be enabled on a running process.
+We set a temporary breakpoint on <em>main</em> and start execution until we reach it, all done with the command <code>start</code>.
+Then, we enable recording of the execution flow with <code>record</code> and continue execution with <code>c</code> which is a short form of the <code>continue</code> command.</p><p>Well, now we got thrown out of the interactive GDB session for some reason.
+We can bring it back to the foreground with the shell command <code>fg</code>.</p><pre><code>$ fg
+gdb ./bug
+Process record: failed to record execution log.
+
+Program stopped.
+0x0000000000000023 in ?? ()
+</code></pre><p>The program stopped at a very low address which GDB cannot map to any source code location.
+It looks like the stack got corrupted somewhere.
+If you get a coredump in such a corrupted state, you are most often out of luck to reason in any way about it and find the root cause of the memory corruption.</p><p>Luckily, we recorded the execution flow which means we have some magic up our sleeves.
+First, let&rsquo;s step backwards until we reach a known location in our program.
+<code>reverse-stepi</code> or just <code>rsi</code> steps a single instruction backwards.</p><pre><code>(gdb) rsi
+0x0000000000401bef in main () at bug.c:30
+30      }
+</code></pre><p>There we are! At the very end of <em>main</em>.
+As we already suspected a stack corruption, let&rsquo;s have a look at the top of the stack.</p><pre><code>(gdb) p /x $rsp
+$1 = 0x7fffffffe638
+(gdb) x 0x7fffffffe638
+0x7fffffffe638: 0x00000023
+</code></pre><p>The register <em>rsp</em> points to the top of the stack.
+We print the content of <em>rsp</em> in hexadecimal with <code>p /x $rsp</code> which gives us the address of the current top of the stack.
+We examine the memory location with <code>x 0x7fffffffe638</code>.
+Voilà! There is the bogus low address again.</p><p>The return instruction at the end of <em>main</em> reads the return address from the top of the stack to jump back to the caller of <em>main</em>, but at some point this address was overwritten with this bogus value, leading to a segfault.
+To find the location when the return address gets overwritten, we can make good use of watchpoints.</p><pre><code>(gdb) set can-use-hw-watchpoints 0
+(gdb) watch *0x7fffffffe638
+Watchpoint 3: *0x7fffffffe638
+(gdb) rc
+Continuing.
+
+Watchpoint 3: *0x7fffffffe638
+
+Old value = 35
+New value = 4203520
+0x0000000000401bd2 in main () at bug.c:26
+26                      array[i] = i;
+(gdb) p i
+$2 = 35
+</code></pre><p>Hardware watchpoints do not work when we step backwards in a recorded execution flow.
+We have to disable them.
+Then, we set a watchpoint on the return address at the memory address <code>0x7fffffffe638</code>.
+If any instruction modifies it, GDB will break on it.
+Now, we continue stepping backwards in time until we break on the watchpoint with <code>reverse-continue</code> or just <code>rc</code>.</p><p>And there we are! At the root cause of the stack memory corruption!
+When writing to <code>array</code> which is stored on the stack, we overwrite the return address.
+A classic stack buffer overflow.
+<code>i</code> is out of bounds, writing at position 35 in an array with 32 elements.</p><p>I guess, a lot of people already saw the problem in the code listing.
+<code>sizeof(array)</code> returns the size in bytes and not the number of elements of the array.
+The fix is up to the reader.</p><p>The overhead induced by the recording in GDB is the main reason why it is used very rarely.
+It is not practical for any non-trivial program.
+Nevertheless, it layed the ground work for other projects to base their work on.
+The <a href=https://rr-project.org/>rr-project</a> tries to make recording and reverse execution efficient.</p><h1 id=the-rr-project>The RR-Project</h1><p>The main tool provided by the rr-project is called <code>rr</code>.
+A debug session with <code>rr</code> is split in two phases.
+First, the program execution is recorded and stored completely to disk.</p><pre><code>$ rr record ./bug
+</code></pre><p>If you get a fatal error talking about /proc/sys/kernel/perf_event_paranoid being too large, just write a smaller value to this file as root (<code>echo 1 &gt;/proc/sys/kernel/perf_event_paranoid</code>) or alternatively use <code>rr record -n ./bug</code>.</p><p>Next, the recording can be replayed even on a different machine as often as you want, behaving exactly the same way as when recorded.
+The program is not really executed during replay, e.g., I/O operations are not done again.
+All side effects are simulated such that the debugged program behaves in the same way.</p><pre><code>$ rr replay
+
+-- snip --
+
+0x0000000000401a90 in _start ()
+(rr) c
+Continuing.
+
+Program received signal SIGSEGV, Segmentation fault.
+0x0000000000000023 in ?? ()
+</code></pre><p>There we are again.
+Getting a segfault when trying to execute code at 0x23.
+<code>rr replay</code> implicitly opens the last recording.
+You can use the same commands as in GDB to step backwards in the program execution, examine the stack and set watchpoints.
+You do not have to disable hardware watchpoints in <code>rr</code>.
+They work just fine.
+Try it out for yourself.</p><p>The separation in the two phases <em>record</em> and <em>replay</em> makes it easier to ship this information from the user to the developers.
+A recording is much better than backtraces and coredumps.
+Furthermore, if you face a bug which only happens sometimes, you only have to record it once and be able to reproduce it everytime by replaying the recording.</p><p>If you want to find out more about the inner workings of <code>rr</code> check out their <a href=https://rr-project.org/>website</a> and <a href=https://arxiv.org/abs/1610.02144>paper</a>.</p><h1 id=conclusion>Conclusion</h1><p>GDB and rr are not the only debugging tools which support recording and reversible debugging.
+<a href=https://www.undo.io/>UndoDB</a> is a commercial debugger for linux supporting record and replay.
+Microsoft calls it &ldquo;<a href=https://docs.microsoft.com/en-us/windows-hardware/drivers/debugger/time-travel-debugging-overview>Time Travel Debugging</a>&rdquo;.
+It seems to be right time to get familiar with these tools to improve the productivity of our debug sessions.</p></article><div class=pagination><a href=https://tetzank.github.io/posts/return-oriented-programming/ class="left arrow">&#8592; previous</a>
+<a href=# class=top>Top</a></div></main></div></body></html>
