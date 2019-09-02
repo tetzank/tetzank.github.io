@@ -17,7 +17,7 @@ Let us look at the following tiny program to learn the basic commands and get a 
 	}
 
 	<span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
-}</code></pre></div><p>This program does not compute anything at all but it has a simple bug which illustrates the benefits of being able to step backwards in the program execution flow.
+}</code></pre></div><p>This program does not compute anything at all, but it has a simple bug which illustrates the benefits of being able to step backwards in the program execution flow.
 We compile it with the following command.</p><pre><code>$ gcc -g -static -fno-stack-protector bug.c -o bug
 </code></pre><p>We use <code>-g</code> to enable debug information, <code>-static</code> to build a static executable without any links to shared libraries like the libc, and <code>-fno-stack-protector</code> to disable any stack protection the compiler might add by default.
 Some linux distributions enable stack protection by default to any compilation done on the platform.
@@ -62,7 +62,7 @@ $1 = 0x7fffffffe638
 </code></pre><p>The register <em>rsp</em> points to the top of the stack.
 We print the content of <em>rsp</em> in hexadecimal with <code>p /x $rsp</code> which gives us the address of the current top of the stack.
 We examine the memory location with <code>x 0x7fffffffe638</code>.
-Voilà! There is the bogus low address again.</p><p>The return instruction at the end of <em>main</em> reads the return address from the top of the stack to jump back to the caller of <em>main</em>, but at some point this address was overwritten with this bogus value, leading to a segfault.
+Voilà! There is the bogus low address again.</p><p>The return instruction at the end of <em>main</em> reads the return address from the top of the stack to jump back to the caller of <em>main</em>, but at some point, this address was overwritten with this bogus value, leading to a segfault.
 To find the location when the return address gets overwritten, we can make good use of watchpoints.</p><pre><code>(gdb) set can-use-hw-watchpoints 0
 (gdb) watch *0x7fffffffe638
 Watchpoint 3: *0x7fffffffe638
@@ -88,7 +88,7 @@ A classic stack buffer overflow.
 <code>sizeof(array)</code> returns the size in bytes and not the number of elements of the array.
 The fix is up to the reader.</p><p>The overhead induced by the recording in GDB is the main reason why it is used very rarely.
 It is not practical for any non-trivial program.
-Nevertheless, it layed the ground work for other projects to base their work on.
+Nevertheless, it laid the ground work for other projects to base their work on.
 The <a href=https://rr-project.org/>rr-project</a> tries to make recording and reverse execution efficient.</p><h1 id=the-rr-project>The RR-Project</h1><p>The main tool provided by the rr-project is called <code>rr</code>.
 A debug session with <code>rr</code> is split in two phases.
 First, the program execution is recorded and stored completely to disk.</p><pre><code>$ rr record ./bug
@@ -104,16 +104,18 @@ Continuing.
 
 Program received signal SIGSEGV, Segmentation fault.
 0x0000000000000023 in ?? ()
-</code></pre><p>There we are again.
+</code></pre><p><code>rr replay</code> implicitly opens the last recording and stops at the entry point of the program which is at the symbol <em>_start</em>.
+We continue execution with <code>c</code> to reach the end of the recording.</p><p>There we are again.
 Getting a segfault when trying to execute code at 0x23.
-<code>rr replay</code> implicitly opens the last recording.
 You can use the same commands as in GDB to step backwards in the program execution, examine the stack and set watchpoints.
 You do not have to disable hardware watchpoints in <code>rr</code>.
 They work just fine.
 Try it out for yourself.</p><p>The separation in the two phases <em>record</em> and <em>replay</em> makes it easier to ship this information from the user to the developers.
 A recording is much better than backtraces and coredumps.
-Furthermore, if you face a bug which only happens sometimes, you only have to record it once and be able to reproduce it everytime by replaying the recording.</p><p>If you want to find out more about the inner workings of <code>rr</code> check out their <a href=https://rr-project.org/>website</a> and <a href=https://arxiv.org/abs/1610.02144>paper</a>.</p><h1 id=conclusion>Conclusion</h1><p>GDB and rr are not the only debugging tools which support recording and reversible debugging.
-<a href=https://www.undo.io/>UndoDB</a> is a commercial debugger for linux supporting record and replay.
+Furthermore, if you face a bug which only happens sometimes, you only have to record it once and be able to reproduce it every time by replaying the recording.</p><p>If you want to find out more about the inner workings of <code>rr</code> check out their <a href=https://rr-project.org/>website</a> and <a href=https://arxiv.org/abs/1610.02144>paper</a>.</p><h1 id=conclusion>Conclusion</h1><p>GDB and rr are not the only debugging tools which support recording and reversible debugging.
+<a href=https://www.undo.io/>UndoDB</a> is a commercial debugger for linux supporting efficient record and replay.
 Microsoft calls it &ldquo;<a href=https://docs.microsoft.com/en-us/windows-hardware/drivers/debugger/time-travel-debugging-overview>Time Travel Debugging</a>&rdquo;.
-It seems to be right time to get familiar with these tools to improve the productivity of our debug sessions.</p></article><div class=pagination><a href=https://tetzank.github.io/posts/return-oriented-programming/ class="left arrow">&#8592; previous</a>
+It seems to be the right time to get familiar with these novel tools and features to improve the productivity of our debug sessions.
+Debugging is usually not fun.
+So, let&rsquo;s get it done quickly.</p></article><div class=pagination><a href=https://tetzank.github.io/posts/return-oriented-programming/ class="left arrow">&#8592; previous</a>
 <a href=# class=top>Top</a></div></main></div></body></html>
