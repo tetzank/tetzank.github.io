@@ -1,0 +1,175 @@
+<!doctype html><html><head><title>COAT: EDSL for Codegen</title><link rel=stylesheet href=/css/style.css></head><body><nav class=header><div class=header-container><a href=/>Dangerous Assembly</a><div class=header-menu><a href=/index.xml>RSS</a>
+<a href=https://github.com/tetzank/>github</a>
+<a href=/publications/>publications</a>
+<a href=/about/>about</a></div></div></nav><div id=content><main><article><header><time datetime="2019-09-12 20:40:01 &#43;0200 CEST" class=catalogue-time>2019-09-12</time><h1>COAT: EDSL for Codegen</h1><div class=post-line></div></header><aside><details><summary>Contents</summary><nav id=TableOfContents><ul><li><a href=#partial-evaluation>Partial Evaluation</a></li><li><a href=#embedded-domain-specific-language-edsl>Embedded Domain Specific Language (EDSL)</a></li><li><a href=#codegen-abstract-types-coat>Codegen Abstract Types (COAT)</a></li><li><a href=#control-flow-abstractions>Control Flow Abstractions</a></li><li><a href=#implementation-details>Implementation Details</a></li><li><a href=#similar-project>Similar Project</a></li><li><a href=#conclusion>Conclusion</a></li></ul></nav></details></aside><p>Code specialization has a huge impact on performance.
+Tailored code takes advantage of the knowledge about the involved data types and operations.
+In C++, we can instruct the compiler to generate specialized code at compile-time with the help of template metaprogramming and constant expressions.
+However, constant evaluation is limited as it cannot leverage runtime information.
+Just-in-time compilations lifts this limitation by enabling programs to generate code at runtime.
+In this post, I will present a header-only library providing abstract types and control flow abstractions to make code generation at runtime easier to use.</p><p><strong>Disclaimer: This project is still in its early alpha stage.</strong></p><h1 id=partial-evaluation>Partial Evaluation</h1><p>In programming language theory there is the interesting concept of partial evaluation.
+Let&rsquo;s assume that parts of the input state of a program are known at a certain point in time.
+Hence, some of the expressions and statements for which we know the inputs can be evaluated and the whole program transformed into a specialized form for this partial input.
+The specialized program ought to be faster as we already evaluated parts of its expressions.</p><p>C++ provides languages features to support this concept like constant expressions.
+Constant expressions are evaluated during compilation when all inputs are constants.
+Only their results leak to the runtime of the program.
+The point in time for the transformation is restricted to compile-time.
+There is no support in the language to generate code at runtime.</p><p>Depending on the task of the program, code specialization at runtime can be very beneficial.
+Let&rsquo;s assume for a second that your program takes complex tasks as an input.
+Each task consists of a sequence of operations which must be applied to a large number of data items.
+Instead of interpreting each operation one after the other for each data item, it would be much better to generate a single function which applies all operations of the task at hand and just call this function for each data item.
+I&rsquo;m a database researcher.
+Naturally, I&rsquo;m thinking about database queries here.</p><p>Luckily, compiler frameworks like LLVM are built in a modular way that the code generation and optimization part can be used as a library which allows an application to use them at runtime.
+Nevertheless, it is far from easy to integrate just-in-time compilation into an application.
+The compiler APIs are complex and generating LLVM IR, the intermediate language/representation of LLVM, is tedious and error-prone.
+LLVM IR is like an architecture agnostic assembler language which we have to create one instruction after the other with complex API calls.
+All in all, it is similar to writing assembly by hand.</p><p>That is clearly not the most productive way to spend your time which is why I added more and more abstractions on top of the compiler API and ended up with an embedded domain specific language (EDSL) to make code generation easier to use.</p><h1 id=embedded-domain-specific-language-edsl>Embedded Domain Specific Language (EDSL)</h1><p>An EDSL is part of the source code it is embedded in (host language).
+The syntax and operators of the host language are customized on special data types to express the DSL inside the host language.
+Operator overloading in C++ comes in handy here.</p><p>The obvious advantage is the tight integration into the surrounding source code.
+There are no language boundaries, no parsers or other tools.
+It follows all the syntax rules of the host language which is a big plus as developers are familiar with it, but it can also be a big limitation as we cannot create more fitting abstractions in the syntax for the specific domain we are dealing with.
+Furthermore, for the untrained eye, it might be hard to distinguish which values have customized operators and therefore a different semantic than the standard operators.
+Everything has its learning curve.</p><p>The most compelling advantage for me is type-safety at compile-time.
+The EDSL is integrated and therefore compiled together with all the other source code.
+With compile-time checks, we can verify if the EDSL is well-formed.</p><h1 id=codegen-abstract-types-coat>Codegen Abstract Types (COAT)</h1><p>COAT is an EDSL for C++ which makes just-in-time code generation easier.
+It provides data types and control flow abstractions to express the code we want to generate.
+In a nutshell, instead of evaluating an operator, we write equivalent instructions through the compiler API to the generated function.
+The instruction is chosen considering the types of the operands.</p><p>An example is better than a thousand words.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;cstdio&gt;</span><span style=color:#75715e>
+</span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;vector&gt;</span><span style=color:#75715e>
+</span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;numeric&gt;</span><span style=color:#75715e>
+</span><span style=color:#75715e></span>
+<span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;coat/Function.h&gt;</span><span style=color:#75715e>
+</span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;coat/ControlFlow.h&gt;</span><span style=color:#75715e>
+</span><span style=color:#75715e></span>
+
+<span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>(){
+	<span style=color:#75715e>// generate some data
+</span><span style=color:#75715e></span>	std<span style=color:#f92672>::</span>vector<span style=color:#f92672>&lt;</span>uint64_t<span style=color:#f92672>&gt;</span> data(<span style=color:#ae81ff>1024</span>);
+	std<span style=color:#f92672>::</span>iota(data.begin(), data.end(), <span style=color:#ae81ff>0</span>);
+
+	<span style=color:#75715e>// initialize backend, AsmJit in this case
+</span><span style=color:#75715e></span>	coat<span style=color:#f92672>::</span>runtimeasmjit asmrt;
+	<span style=color:#75715e>// signature of the generated function
+</span><span style=color:#75715e></span>	<span style=color:#66d9ef>using</span> func_t <span style=color:#f92672>=</span> uint64_t (<span style=color:#f92672>*</span>)(uint64_t <span style=color:#f92672>*</span>data, uint64_t size);
+	<span style=color:#75715e>// context object representing the generated function
+</span><span style=color:#75715e></span>	coat<span style=color:#f92672>::</span>Function<span style=color:#f92672>&lt;</span>coat<span style=color:#f92672>::</span>runtimeasmjit,func_t<span style=color:#f92672>&gt;</span> fn(<span style=color:#f92672>&amp;</span>asmrt);
+	<span style=color:#75715e>// start of the EDSL code describing the code of the generated function
+</span><span style=color:#75715e></span>	{
+		<span style=color:#75715e>// get function arguments as &#34;meta-variables&#34;
+</span><span style=color:#75715e></span>		<span style=color:#66d9ef>auto</span> [data,size] <span style=color:#f92672>=</span> fn.getArguments(<span style=color:#e6db74>&#34;data&#34;</span>, <span style=color:#e6db74>&#34;size&#34;</span>);
+
+		<span style=color:#75715e>// &#34;meta-variable&#34; for sum
+</span><span style=color:#75715e></span>		coat<span style=color:#f92672>::</span>Value sum(fn, uint64_t(<span style=color:#ae81ff>0</span>), <span style=color:#e6db74>&#34;sum&#34;</span>);
+		<span style=color:#75715e>// &#34;meta-variable&#34; for past-the-end pointer
+</span><span style=color:#75715e></span>		<span style=color:#66d9ef>auto</span> end <span style=color:#f92672>=</span> data <span style=color:#f92672>+</span> size;
+		<span style=color:#75715e>// loop over all elements
+</span><span style=color:#75715e></span>		coat<span style=color:#f92672>::</span>for_each(fn, data, end, [<span style=color:#f92672>&amp;</span>](<span style=color:#66d9ef>auto</span> <span style=color:#f92672>&amp;</span>element){
+			<span style=color:#75715e>// add each element to the sum
+</span><span style=color:#75715e></span>			sum <span style=color:#f92672>+=</span> element;
+		});
+		<span style=color:#75715e>// specify return value
+</span><span style=color:#75715e></span>		coat<span style=color:#f92672>::</span>ret(fn, sum);
+	}
+	<span style=color:#75715e>// finalize code generation and get function pointer to the generated function
+</span><span style=color:#75715e></span>	func_t foo <span style=color:#f92672>=</span> fn.finalize(<span style=color:#f92672>&amp;</span>asmrt);
+
+	<span style=color:#75715e>// execute the generated function
+</span><span style=color:#75715e></span>	uint64_t result <span style=color:#f92672>=</span> foo(data.data(), data.size());
+
+	<span style=color:#75715e>// print result
+</span><span style=color:#75715e></span>	uint64_t expected <span style=color:#f92672>=</span> std<span style=color:#f92672>::</span>accumulate(data.begin(), data.end(), <span style=color:#ae81ff>0</span>);
+	printf(<span style=color:#e6db74>&#34;result: %lu; expected: %lu</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, result, expected);
+
+	<span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+}
+</code></pre></div><p>In this example, we generate a function which calculates the sum of a vector.
+This is hardly a useful application of just-in-time code generation, but it is small enough to show the full program, and it gets the main idea of COAT across.</p><p>After generating some basic data, we initialize one of the compiler backends of COAT.
+At the moment, COAT supports two backends: AsmJit and LLVM.
+Next, we define the signature of the function we want to generate with <code>using</code>.
+The data array is passed with a pointer and size pair to the function which in turn returns the sum of all elements.
+Finally, we create a <code>coat::Function</code> object with the compiler backend and function signature as template parameters.
+It will be the context object representing the generated function.
+Internally, it prepares the compiler backend to generate the function with the requested signature.</p><p>Afterwards, we start writing the content of the generated function.
+We open an artificial block scope to emphasize the code segment with the EDSL types.
+All objects in this scope are meta objects which generate code.
+They are used to describe the code to be generated in a natural and readable way.</p><p>At the beginning of the scope, we get the arguments from the function context.
+The types and number of arguments are automatically deduced from the function signature.
+Next, we create a variable for the sum and initialize it to zero, followed by the definition of the past-the-end pointer for the array.
+Then, we use the loop construct <code>coat::for_each</code> which generates a loop to iterate over all elements between two pointers, similar to <code>std::for_each</code>.
+The passed lambda acts as the loop body and sums up all the elements.
+Finally, the sum variable is specified as return value with <code>coat::ret</code>.</p><p>All in all, the EDSL looks pretty much like normal C++ code.
+The details of the compiler API are hidden behind the abstraction of these types.
+The code is much easier to read and maintain than the sea of complex API calls one usually has with just-in-time compilers.</p><p>We can mix C++ code and EDSL code in any way we see fit, e.g., we could pre-calculate some values during code generation and add them as constants to the generated code.
+This is analogue to constant expressions pre-calculating at compile-time and adding constants to the runtime code.
+One other common case is the conditional generation of code.
+Depending on the program state or some input, we generate different code fragments.
+The condition can be ordinary C++ code.</p><h1 id=control-flow-abstractions>Control Flow Abstractions</h1><p>In the example, we already saw <code>coat::for_each</code> in action.
+It takes two pointers and increments in each loop iteration the first pointer until it is equal to the second pointer.
+It generates code similar to a for-loop.</p><p>For other loop and branch constructs of C++, COAT provides similar abstractions.
+The following table summarizes all the control flow abstractions and relate them to the equivalent C++ code.</p><table style="width:100%;border-spacing:.5em 1em"><tr><th>C++</th><th>COAT</th></tr><tr><td><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=color:#66d9ef>if</span>( condition ){
+	then_branch
+}
+</code></pre></div></td><td><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++>coat<span style=color:#f92672>::</span>if_then(coat<span style=color:#f92672>::</span>Function<span style=color:#f92672>&amp;</span>, condition, [<span style=color:#f92672>&amp;</span>]{
+	then_branch
+});
+</code></pre></div></td></tr><tr><td><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=color:#66d9ef>if</span>( condition ){
+	then_branch
+}<span style=color:#66d9ef>else</span>{
+	else_branch
+}
+</code></pre></div></td><td><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++>coat<span style=color:#f92672>::</span>if_then_else(coat<span style=color:#f92672>::</span>Function<span style=color:#f92672>&amp;</span>, condition, [<span style=color:#f92672>&amp;</span>]{
+	then_branch
+}, [<span style=color:#f92672>&amp;</span>]{
+	else_branch
+});
+</code></pre></div></td></tr><tr><td><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=color:#66d9ef>while</span>( condition ){
+	loop_body
+}
+</code></pre></div></td><td><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++>coat<span style=color:#f92672>::</span>loop_while(coat<span style=color:#f92672>::</span>Function<span style=color:#f92672>&amp;</span>, condition, [<span style=color:#f92672>&amp;</span>]{
+	loop_body
+});
+</code></pre></div></td></tr><tr><td><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=color:#66d9ef>do</span> {
+	loop_body
+} <span style=color:#66d9ef>while</span>( condition );
+</code></pre></div></td><td><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++>coat<span style=color:#f92672>::</span>do_while(coat<span style=color:#f92672>::</span>Function<span style=color:#f92672>&amp;</span>, [<span style=color:#f92672>&amp;</span>]{
+	loop_body
+}, condition );
+</code></pre></div></td></tr></table><p>To make this clear again, the code on the right is only executed once, not iterating in case of a loop, and generates machine code in the end which is equivalent to the C++ code on the left.
+We are describing the generated code.
+When we call the generated function, the loops and branches will be executed.</p><h1 id=implementation-details>Implementation Details</h1><p>In this section, I will briefly talk about the two backends COAT currently supports: AsmJit and LLVM.
+And also give some details about the implementation of each backend.</p><p><strong>AsmJit backend</strong></p><p><a href=https://asmjit.com/>AsmJit</a> is a C++ library providing a just-in-time assembler.
+It supports x86 assembly with all of its extensions.
+The API is quite simple.
+After a few initializations, we can start generating x86 instructions one after the other.
+We are literally writing assembly with library calls.</p><p>The generated code will be executed as-is.
+There are no optimization passes cleaning up the code.
+It&rsquo;s just an assembler.
+When using the &ldquo;Compiler&rdquo; backend of AsmJit, we can use virtual registers which are unlimited in number.
+A register allocator pass will map virtual register to physical registers when finalizing the machine code.</p><p>The AsmJit backend of COAT makes heavy use of virtual registers.
+A <code>coat::Value</code> representing a variable in the generated code is basically just a wrapper around a virtual register.
+All arithmetic operators are customized to generate instructions using the virtual registers of the operands.</p><p>The generation is done immediately in the overloaded operator which means that temporaries used in nested expressions cannot be eliminated.
+Some SIMD libraries use expression trees to capture the whole expression and eliminates unnecessary temporaries.
+This is not done here.
+The expressions are mapped 1:1 to the corresponding x86 instructions.</p><p>The compilation latency of AsmJit is very low.
+If you want to generate a function as fast as possible, this is the right backend for you.
+The efficiency of the generated code is up to you.</p><p><strong>LLVM backend</strong></p><p><a href=https://llvm.org/>LLVM</a> is a modular compiler framework providing ahead-of-time and just-in-time compiler support.
+Clang is the C++ frontend of LLVM.
+The API is quite complex as LLVM supports a lot of different compilation modes.</p><p>LLVM IR is the intermediate representation of the program code inside of LLVM.
+It is the common currency between most components.
+To keep compilation latency at a minimum, the LLVM backend of COAT generates LLVM IR instructions and passes them to the LLVM libraries, avoiding the C++ frontend.
+Optionally, various optimization passes can be applied to the generated LLVM IR, e.g., removing unnecessary temporaries.
+Finally, machine code can be generated with the help of various backends supporting a multitude of microarchitectures.</p><p>LLVM IR is in SSA form (static single assignment) which means that every value is immutable once created.
+This is an essential property for optimization passes but a bit inpractical for code generation.
+Similar to a C++ frontend, we can work around this limitation by storing values in memory, e.g., on the stack.
+Every overloaded operator must first load the value from memory, apply its operation and store the result back to memory.
+Optimization passes make this more efficient by storing values in registers where possible.</p><p>The compilation latency of LLVM is much bigger compared to AsmJit, but LLVM provides optimization passes which can make a big difference in the runtime of the generated function.</p><h1 id=similar-project>Similar Project</h1><p>A somewhat similar recent approach is <a href=https://arxiv.org/abs/1904.08555>ClangJIT</a>.
+To put it simply, it defers instantiation of annotated templates from compile-time to runtime.
+Therefore, it integrates nicely into C++ source code.
+We are reusing existing language features like templates and the compiler does all the heavy lifting for us.
+No need for special libraries.</p><p>The disadvantage is obviously the required compiler support which is currently limited to this fork of Clang.
+COAT works with any modern C++ compiler.
+Furthermore, compilation latency suffers from the fact that the application has to carry the full compiler along, including the C++ frontend instantiating the template at runtime.
+In COAT, you can choose the backend, and with the AsmJit backend compilation latency is very low.</p><h1 id=conclusion>Conclusion</h1><p>The source code is available in a <a href=https://github.com/tetzank/coat.git>github repository</a>.
+The project is still in its early alpha stage with a lot of limitations, e.g., debugging support is completely missing at the moment.
+With the help of others, I hope, it can become a useful tool for C++ developers.</p><p>In the next post, I will present a more comprehensive example for just-in-time compilation.
+We will look at modern relational databases and how they make use of code generation for query execution.</p></article><div class=pagination><a href=https://tetzank.github.io/posts/static-machine-code-analysis/ class="left arrow">&#8592; previous</a>
+<a href=# class=top>Top</a></div></main></div></body></html>
