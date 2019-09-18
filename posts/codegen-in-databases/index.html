@@ -1,0 +1,312 @@
+<!doctype html><html><head><title>Codegen in Databases</title><link rel=stylesheet href=/css/style.css></head><body><nav class=header><div class=header-container><a href=/>Dangerous Assembly</a><div class=header-menu><a href=/index.xml>RSS</a>
+<a href=https://github.com/tetzank/>github</a>
+<a href=/publications/>publications</a>
+<a href=/about/>about</a></div></div></nav><div id=content><main><article><header><time datetime="2019-09-18 15:25:08 &#43;0200 CEST" class=catalogue-time>2019-09-18</time><h1>Codegen in Databases</h1><div class=post-line></div></header><aside><details><summary>Contents</summary><nav id=TableOfContents><ul><li><a href=#sigmod-programming-contest-2018>SIGMOD Programming Contest 2018</a></li><li><a href=#data-centric-execution-pipeline>Data-centric Execution Pipeline</a></li><li><a href=#variants-of-code-generation>Variants of Code Generation</a></li><li><a href=#morsel-driven-parallelism>Morsel-Driven Parallelism</a></li><li><a href=#operator-implementations>Operator Implementations</a></li><li><a href=#experimental-evaluation>Experimental Evaluation</a></li><li><a href=#conclusion>Conclusion</a></li></ul></nav></details></aside><p>Just-in-time compilation is usually associated with managed languages like Java and C#, or scripting languages like Javascript.
+As detailed in the previous post, many other applications benefit from ad hoc code generation as well.
+This post is a tutorial on code generation in relational databases.
+Relational databases are commonly accessed with the standard query language SQL.
+The query optimizer generates an optimized query plan and passes it to the query execution engine for processing which in modern systems generates machine code for faster execution.</p><h1 id=sigmod-programming-contest-2018>SIGMOD Programming Contest 2018</h1><p>SIGMOD is one of the most popular database conferences.
+Each year, a programming contest is held, and the top finalists can present their implementations at the venue.
+It is all about performance.
+The submissions are ranked by their evaluation time.
+The winner with the fastest program usually organizes the contest in the following year.</p><p>In 2018, <a href=http://sigmod18contest.db.in.tum.de/task.shtml>the task</a> was to write a prototype of a query execution engine.
+The queries are quite simple, consisting only of joins with an equivalence predicate (equi-joins) and simple filters (single predicate, no complex expressions).
+Furthermore, there is only one data type: an integer of 8 bytes.
+This limits the number of operators the execution engine must support considerably which makes it a nice task for a programming contest, and a tutorial such as this one.</p><p>The queries are in an easy to parse text format. Let&rsquo;s have a look at one example query.</p><p>Example query: <code>0 2 4|0.1=1.2&amp;1.0=2.1&amp;0.1&gt;3000|0.0 1.1</code></p><p>There are three parts:</p><ol><li>The list of relations participating in the query.</li><li>All equi-joins and filters combined in one conjunction.</li><li>The list of columns to project on which implicitly sums up all elements and just returns a single tuple with the sums for each projected column.</li></ol><p>In SQL, it would look like the following query.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-SQL data-lang=SQL><span style=color:#66d9ef>SELECT</span> <span style=color:#66d9ef>SUM</span>(<span style=color:#e6db74>&#34;0&#34;</span>.c0), <span style=color:#66d9ef>SUM</span>(<span style=color:#e6db74>&#34;1&#34;</span>.c1)
+<span style=color:#66d9ef>FROM</span> r0 <span style=color:#e6db74>&#34;0&#34;</span>, r2 <span style=color:#e6db74>&#34;1&#34;</span>, r4 <span style=color:#e6db74>&#34;2&#34;</span>
+<span style=color:#66d9ef>WHERE</span> <span style=color:#e6db74>&#34;0&#34;</span>.c1<span style=color:#f92672>=</span><span style=color:#e6db74>&#34;1&#34;</span>.c2 <span style=color:#66d9ef>and</span> <span style=color:#e6db74>&#34;1&#34;</span>.c0<span style=color:#f92672>=</span><span style=color:#e6db74>&#34;2&#34;</span>.c1 <span style=color:#66d9ef>and</span> <span style=color:#e6db74>&#34;0&#34;</span>.c1<span style=color:#f92672>&gt;</span><span style=color:#ae81ff>3000</span></code></pre></div><p>The implicit sum in the projection is quite interesting.
+It means that the result set is always just a single tuple.
+If we can keep the amount of intermediate results as low as possible before condensing it to a single list of sums in the projections, we are golden.
+With code generation we can avoid most of the intermediate results by just keeping track of the position in the table (row id).
+As we will see in the next section, additional optimizations eliminate the overhead inherent to interpretation, resulting in a small amount of instructions doing only the necessary work.</p><p>Code generation is perceived by a lot of developers as very complex and hard to grasp, if one is not a compiler developer.
+I argue, it is not that hard if one gets into the right mindset and uses the right tools.
+I hope that you will agree with me at the end of this tutorial.</p><h1 id=data-centric-execution-pipeline>Data-centric Execution Pipeline</h1><p>We follow the approach of data-centric code generation introduced in <a href=http://hyper-db.com/>HyPer</a> with the paper &ldquo;Efficiently Compiling Efficient Query Plans for Modern Hardware&rdquo; by Thomas Neumann.
+Check out the list of publications on their website if you want to get deeper into the topic.</p><p>We focus purely on the query execution engine in this tutorial.
+A database does a lot of optimizations beforehand during query planning.
+The order in which operators are executed, especially the join order, has a large impact on the query execution time.
+For simplicity, we assume that this is already done and returns a left deep query plan with one long operator pipeline from a scan all the way to the projection.</p><p><svg width="430" height="300" xmlns="http://www.w3.org/2000/svg"><g text-anchor="middle"><g font-weight="bold" text-decoration="underline"><text x="120" y="15">Left Deep Query Plan</text><text x="350" y="15">Operator Pipeline</text></g><text x="50" y="300">R</text><text x="50" y="240">&sigma;<tspan dy="3" font-size="smaller">R<tspan dy="3" font-size="smaller">1</tspan><tspan dy="-3">&gt;3000</tspan></tspan></text><text x="100" y="180">&bowtie;<tspan dy="3" font-size="smaller">R<tspan dy="3" font-size="smaller">1</tspan><tspan dy="-3">=S</tspan><tspan dy="3" font-size="smaller">2</tspan></tspan></text><text x="150" y="120">&bowtie;<tspan dy="3" font-size="smaller">S<tspan dy="3" font-size="smaller">0</tspan><tspan dy="-3">=T</tspan><tspan dy="3" font-size="smaller">1</tspan></tspan></text><text x="150" y="60">&pi;<tspan dy="3" font-size="smaller">R<tspan dy="3" font-size="smaller">0</tspan><tspan dy="-3">,S</tspan><tspan dy="3" font-size="smaller">1</tspan></tspan></text><text x="150" y="240">S</text><text x="200" y="180">T</text><path d="M50 280v-30m10-25 30-35m20-25 30-35m10-30V70" stroke="red" stroke-width="4" fill="none"/><path d="M140 220l-25-25m-5 5 10-10m70-30-25-25m-5 5 10-10" stroke="#000" stroke-width="2" fill="none"/><text x="350" y="300">Scan</text><text x="350" y="240">Filter</text><text x="350" y="180">Hashjoin</text><text x="350" y="120">Hashjoin</text><text x="350" y="60">Projection/Sum</text><path id="darrow" d="M350 280v-30m4 0v30m5-25-7-7-7 7" stroke="red" stroke-width="2" fill="none"/><use href="#darrow" transform="translate(0 -60)" /><use href="#darrow" transform="translate(0 -120)" /><use href="#darrow" transform="translate(0 -180)" /></g></svg></p><p>The figure on the left is a left deep query plan of the example query.
+For clarity, the participating tables were renamed to R, S and T.
+The long operator pipeline is marked in red.
+The sequence of operators in the pipeline is illustrated on the right, from the bottom to the top.
+The results of an operator are pushed into the next operator until the projection is reached where the results are aggregated into a sum per projected column, here R<sub>0</sub> and S<sub>1</sub>.</p><p>Our goal is to generate code to execute the pipeline.
+We gracefully ignore the build phase of the hashjoins constructing the hashtables and assume that it is already taken care of.
+The following handwritten C++ code shall be the template for the code generation, illustrating how the operators are merged together into a single function.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=color:#75715e>// result variables for projection
+</span><span style=color:#75715e></span>uint32_t num<span style=color:#f92672>=</span><span style=color:#ae81ff>0</span>, p0<span style=color:#f92672>=</span><span style=color:#ae81ff>0</span>, p1<span style=color:#f92672>=</span><span style=color:#ae81ff>0</span>;
+
+<span style=color:#75715e>// scan of R, loop over all row ids
+</span><span style=color:#75715e></span><span style=color:#66d9ef>for</span>(uint32_t R_index<span style=color:#f92672>=</span><span style=color:#ae81ff>0</span>; R_index<span style=color:#f92672>&lt;</span>R.size; <span style=color:#f92672>++</span>R_index){
+
+	<span style=color:#75715e>// filter on R1
+</span><span style=color:#75715e></span>	<span style=color:#66d9ef>if</span>(R1[R_index] <span style=color:#f92672>&gt;</span> <span style=color:#ae81ff>3000</span>){
+
+		<span style=color:#75715e>// hashjoin R1=S2, prepared hashtable of S2 containing row ids of S
+</span><span style=color:#75715e></span>		<span style=color:#66d9ef>auto</span> [it,itend] <span style=color:#f92672>=</span> HT_S2.equal_range(R1[R_index]);
+		<span style=color:#75715e>// loop over all join partners
+</span><span style=color:#75715e></span>		<span style=color:#66d9ef>for</span>(; it<span style=color:#f92672>!=</span>itend; it<span style=color:#f92672>++</span>){
+			<span style=color:#75715e>// set row id for this join partner
+</span><span style=color:#75715e></span>			uint32_t S_index <span style=color:#f92672>=</span> <span style=color:#f92672>*</span>it;
+
+			<span style=color:#75715e>// hash join S0=T1
+</span><span style=color:#75715e></span>			<span style=color:#66d9ef>auto</span> [it2,itend2] <span style=color:#f92672>=</span> HT_T1.equal_range(S0[S_index]);
+			<span style=color:#66d9ef>for</span>(; it2<span style=color:#f92672>!=</span>itend2; it2<span style=color:#f92672>++</span>){
+				<span style=color:#75715e>// row id is unused, semi-join
+</span><span style=color:#75715e></span>				uint32_t T_index <span style=color:#f92672>=</span> <span style=color:#f92672>*</span>it2;
+
+				<span style=color:#75715e>// projection
+</span><span style=color:#75715e></span>				<span style=color:#f92672>++</span>num;             <span style=color:#75715e>// number of rows in aggregate
+</span><span style=color:#75715e></span>				p0 <span style=color:#f92672>+=</span> R0[R_index]; <span style=color:#75715e>// first sum
+</span><span style=color:#75715e></span>				p1 <span style=color:#f92672>+=</span> S1[S_index]; <span style=color:#75715e>// second sum
+</span><span style=color:#75715e></span>			}
+		}
+	}
+}
+</code></pre></div><p>At the beginning, we declare and initialize the result variables of the projection.
+The first operator is a scan of the table R.
+As we want to keep the intermediate results as low as possible, we simply loop over all row ids of the table and only access the elements of the table when needed.</p><p>Next, we apply the filter on R<sub>1</sub>.
+The tables are in columnar storage, i.e., a table is a collection of columns.
+Each column is an array of integers.
+We access the column R<sub>1</sub> at the row id coming from the scan and compare it with the filter predicate.</p><p>Afterwards, we join table R and S when R<sub>1</sub> is equal to S<sub>2</sub>.
+The hashtable <code>HT_S2</code> was constructed beforehand in the build phase.
+It is a multimap containing for each distinct value of S<sub>2</sub> a list of row ids representing the positions of the value in the column.
+We probe the hashtable with the current value of R<sub>1</sub> to get the row ids of the join partners in S.
+We loop over all join partners to consider them one after the other.
+The next hashjoin works in the same manner.</p><p>Finally, in the most inner loop, we have the code for the implicit sum in the projection.
+We simply access each projected column with the current row id of the corresponding table and add it to the sum.
+Additionally, we keep track of the number of values added to the sum to distinguish an empty result set from a sum which is equal to zero.</p><p>As we can see, the operators boil down to just a few statements and are seamlessly nested into each other.
+There are no operator boundaries leading to any call overhead.
+The code is completely inlined.
+Furthermore, the usage of row ids to avoid intermediate results feels quite natural.
+The code is clean and easy to follow.</p><p>In the next section, we will discuss some variants of code generation before jumping into the actual implementation.</p><h1 id=variants-of-code-generation>Variants of Code Generation</h1><p>There are multiple ways to generate code in a database.
+It depends on what language or tool we want to target which in turn does the heavy lifting of generating the native machine code of the CPU.
+The following figure summarizes the various alternatives.</p><p><svg width="480" height="440" xmlns="http://www.w3.org/2000/svg"><defs><marker id="head" orient="auto" markerWidth="12" markerHeight="8" refX=".1" refY="4"><path d="M0 0V8L12 4z" fill="#000"/></marker></defs><g text-anchor="middle"><g transform="translate(50,20)"><path d="M5 5h110v160H5z" stroke="#000" stroke-dasharray="4" fill="none"/><path d="M20 10h80v30H20z" stroke="#000" fill="none"/><path d="M10 110h1e2v50H10z" stroke="#000" fill="none"/><text x="60" y="30">Planning</text><text x="60" y="130">Code</text><text x="60" y="150">Generation</text><path d="M60 40v60" marker-end="url(#head)" stroke="#000" stroke-width="1" fill="none" /><text x="80" y="80">Plan</text></g><text x="25" y="35">Query</text><path d="M5 45H60" marker-end="url(#head)" stroke="#000" stroke-width="1" fill="none"/><text x="110" y="15">Database</text></g><g text-anchor="middle" transform="translate(280,0)"><g transform="translate(5,30)"><path d="M0 0h180v65H0z" stroke="#000" fill="none"/><text x="90" y="20">Front End</text><text x="30" y="50">C++</text><text x="80" y="50">Java</text><text x="140" y="50">Fortran</text><path d="M5 60h170V30H5zm50 0V30m50 0v30" stroke="#000" fill="none"/></g><g transform="translate(5,150)"><path d="M0 0h180v95H0z" stroke="#000" fill="none"/><text x="90" y="20">Middle End</text><text x="90" y="50">Program Analysis</text><text x="90" y="80">Optimizations</text><path d="M5 90h170V30H5v30h170M5 90V60" stroke="#000" fill="none"/></g><g transform="translate(5,300)"><path d="M0 0h180v95H0z" stroke="#000" fill="none"/><text x="90" y="20">Back End</text><text x="30" y="50">x86</text><text x="80" y="50">MIPS</text><text x="140" y="50">SPARC</text><text x="90" y="80">Register Allocator</text><path d="M5 60h170V30H5zm50 0V30m50 0v30M5 60v30h170V60" stroke="#000" fill="none"/></g><text x="90" y="15">Compiler</text><path d="M0 25h190v375H0z" stroke="#000" stroke-dasharray="4" fill="none"/><path d="M95 95v45" marker-end="url(#head)" stroke="#000" fill="none"/><text x="110" y="130">IR</text><path d="M95 245v45" marker-end="url(#head)" stroke="#000" fill="none"/><text x="110" y="280">IR</text><path d="M95 395v35" marker-end="url(#head)" stroke="#000" fill="none"/><text x="150" y="420">native code</text></g><g stroke="#000" fill="none" marker-end="url(#head)"><path id="a" d="M160 130C220 110 250 0 3e2 24"/><path id="b" d="M160 146q80-36 140-2"/><path id="c" d="M160 162c90 8 90 118 140 134"/><path id="d" d="M160 180c50 20 40 195 127 195"/></g><g text-anchor="middle"><text dy="-2"><textPath href="#a" startOffset="50%">a) source code</textPath></text><text dy="-2"><textPath href="#b" startOffset="50%">b) IR</textPath></text><text dy="-2"><textPath href="#c" startOffset="50%">c) IR</textPath></text><text dy="-2"><textPath href="#d" startOffset="50%">d) assembly</textPath></text></g></svg></p><p>Modern compiler frameworks like LLVM are modular, consisting of three main components:
+language <em>front ends</em> parsing source code, the <em>middle end</em> containing most optimizations, and multiple <em>back ends</em> supporting various microarchitectures.
+Each component can be targeted by the code generation of the database.</p><p><strong>a)</strong>
+We can generate source code of a high-level programming language like C++.
+The result would look similar to the example source code in the previous section.
+The main advantage is ease-of-use.
+Developers are familiar with source code.
+It is not so complex to generate source code for each operator in a nested fashion.
+The main disadvantage is the high compilation latency.
+The generated source code must go through all the stages of the compiler to be ready for execution.
+For short running queries, the compilation takes way longer than the query evaluation, even when interpreting.</p><p><strong>b)</strong>
+We can reduce the overhead of the compilation by skipping the language <em>front end</em> and passing the intermediate representation (IR) directly to the compiler.
+We still leverage all the optimizations the compiler has in store for us, but IR is quite complex to generate.
+The IR in the LLVM compiler framework is similar to an architecture agnostic assembly language in a special format which has useful properties for the optimization passes but is not easy to write.</p><p><strong>c)</strong>
+We can shed off even more compilation overhead by sending the IR to the <em>back end</em> and doing an unoptimized build.
+Depending on the query, this can have a large negative influence on the execution time of the generated code.</p><p><strong>d)</strong>
+The last variant skips most of the compiler stages by generating assembly instructions of the target microarchitecture.
+It only leverages the register allocator of the <em>back end</em> which assigns virtual registers to physical registers.
+The use of virtual registers makes the generation of nested code fragments much easier.
+Nevertheless, we are writing assembly which is a tedious and error-prone process, and not portable at all.</p><p>To make our life easier, we will use COAT, an EDSL for C++ which simplifies the implementation of code generation.
+For details, see the <a href=/posts/coat-edsl-for-codegen/>previous post</a> introducing it.
+The variants b) and c) are available with COAT&rsquo;s LLVM backend, variant d) with the AsmJit backend.
+The complexity is hidden from sight behind the EDSL.
+We reap the benefits without sacrificing the ease-of-use.</p><h1 id=morsel-driven-parallelism>Morsel-Driven Parallelism</h1><p>The parallelization scheme we will use is very simple: we partition the input of the pipeline in equal-sized batches, called morsels.
+Each morsel is independent of any other morsel and is executed in parallel without any synchronization.
+When a morsel is fully processed, the resulting sums are added atomically to global sums which store the result of the whole query.</p><p>This parallelization scheme is straightforward and only changes the code generation of the <em>scan</em> operator slightly, as we will see in the next section.</p><h1 id=operator-implementations>Operator Implementations</h1><p>In this section, I will explain how the code generation is done in the operators.
+The whole project is available in a <a href=https://github.com/tetzank/sigmod18contest>git repository on github</a>.
+You can check out the code to see all the details.</p><p>To recap, the programming contest of 2018 requires only a few operators: <em>scan</em>, <em>filter</em>, <em>equi-join</em> and <em>projection/sum</em>.
+Moreover, there is only one data type we have to support.
+Everything is an integer.
+A pipeline is a sequence of operators.
+For this workload, the pipeline always starts with a <em>scan</em> and ends in a <em>projection</em>.</p><p>For simplicity, we link all operators together in a linked list.
+Each operator, except <em>projection</em> of course, calls the next operator in the list at the code position where it should place its code.
+Code can be placed before and after the code of the nested operators.</p><p>Here&rsquo;s a simple abstract class we use as the base class for all operators.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=color:#66d9ef>class</span><span style=color:#960050;background-color:#1e0010> </span><span style=color:#a6e22e>Operator</span>{
+<span style=color:#66d9ef>protected</span><span style=color:#f92672>:</span>
+	Operator <span style=color:#f92672>*</span>next<span style=color:#f92672>=</span><span style=color:#66d9ef>nullptr</span>;
+
+<span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+	Operator(){}
+	<span style=color:#66d9ef>virtual</span> <span style=color:#f92672>~</span>Operator(){
+		<span style=color:#66d9ef>delete</span> next;
+	}
+
+	<span style=color:#66d9ef>void</span> setNext(Operator <span style=color:#f92672>*</span>next){
+		<span style=color:#66d9ef>this</span><span style=color:#f92672>-&gt;</span>next <span style=color:#f92672>=</span> next;
+	}
+
+	<span style=color:#75715e>// code generation with coat, for each backend, chosen at runtime
+</span><span style=color:#75715e></span>	<span style=color:#66d9ef>virtual</span> <span style=color:#66d9ef>void</span> codegen(Fn_asmjit<span style=color:#f92672>&amp;</span>, CodegenContext<span style=color:#f92672>&lt;</span>Fn_asmjit<span style=color:#f92672>&gt;&amp;</span>)<span style=color:#f92672>=</span><span style=color:#ae81ff>0</span>;
+	<span style=color:#66d9ef>virtual</span> <span style=color:#66d9ef>void</span> <span style=color:#a6e22e>codegen</span>(Fn_llvmjit<span style=color:#f92672>&amp;</span>, CodegenContext<span style=color:#f92672>&lt;</span>Fn_llvmjit<span style=color:#f92672>&gt;&amp;</span>)<span style=color:#f92672>=</span><span style=color:#ae81ff>0</span>;
+};
+</code></pre></div><p>There are two pure virtual member functions <code>codegen</code>: one for the LLVM backend and one for the AsmJit backend.
+<code>CodegenContext</code> is a struct holding information each operator can use when generating code, e.g., a list of row ids, one for each participating table.</p><p>The <em>scan</em> operator is called first.
+It iterates over all row ids in the morsel.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=color:#66d9ef>class</span><span style=color:#960050;background-color:#1e0010> </span><span style=color:#a6e22e>ScanOperator</span> <span style=color:#66d9ef>final</span> <span style=color:#f92672>:</span> <span style=color:#66d9ef>public</span> Operator{
+<span style=color:#66d9ef>private</span><span style=color:#f92672>:</span>
+	<span style=color:#66d9ef>template</span><span style=color:#f92672>&lt;</span><span style=color:#66d9ef>class</span><span style=color:#960050;background-color:#1e0010> </span><span style=color:#a6e22e>Fn</span><span style=color:#f92672>&gt;</span>
+	<span style=color:#66d9ef>void</span> codegen_impl(Fn <span style=color:#f92672>&amp;</span>fn, CodegenContext<span style=color:#f92672>&lt;</span>Fn<span style=color:#f92672>&gt;</span> <span style=color:#f92672>&amp;</span>ctx){
+		<span style=color:#75715e>// get lower bound of morsel
+</span><span style=color:#75715e></span>		<span style=color:#75715e>// do not make a copy, just take the virtual register from arguments
+</span><span style=color:#75715e></span>		ctx.rowids[<span style=color:#ae81ff>0</span>] <span style=color:#f92672>=</span> std<span style=color:#f92672>::</span>move(std<span style=color:#f92672>::</span>get<span style=color:#f92672>&lt;</span><span style=color:#ae81ff>0</span><span style=color:#f92672>&gt;</span>(ctx.arguments));
+		<span style=color:#75715e>// get upper bound of morsel
+</span><span style=color:#75715e></span>		<span style=color:#66d9ef>auto</span> <span style=color:#f92672>&amp;</span>upper <span style=color:#f92672>=</span> std<span style=color:#f92672>::</span>get<span style=color:#f92672>&lt;</span><span style=color:#ae81ff>1</span><span style=color:#f92672>&gt;</span>(ctx.arguments);
+		<span style=color:#75715e>// iterate over morsel
+</span><span style=color:#75715e></span>		coat<span style=color:#f92672>::</span>do_while(fn, [<span style=color:#f92672>&amp;</span>]{
+			<span style=color:#75715e>// call next operator
+</span><span style=color:#75715e></span>			next<span style=color:#f92672>-&gt;</span>codegen(fn, ctx);
+			<span style=color:#75715e>// next row id
+</span><span style=color:#75715e></span>			<span style=color:#f92672>++</span>ctx.rowids[<span style=color:#ae81ff>0</span>];
+		}, ctx.rowids[<span style=color:#ae81ff>0</span>] <span style=color:#f92672>&lt;</span> upper);
+	}
+
+<span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+	ScanOperator(<span style=color:#66d9ef>const</span> Relation <span style=color:#f92672>&amp;</span>relation) {}
+
+	<span style=color:#66d9ef>void</span> codegen(Fn_asmjit <span style=color:#f92672>&amp;</span>fn, CodegenContext<span style=color:#f92672>&lt;</span>Fn_asmjit<span style=color:#f92672>&gt;</span> <span style=color:#f92672>&amp;</span>ctx) <span style=color:#66d9ef>override</span> { codegen_impl(fn, ctx); }
+	<span style=color:#66d9ef>void</span> codegen(Fn_llvmjit <span style=color:#f92672>&amp;</span>fn, CodegenContext<span style=color:#f92672>&lt;</span>Fn_llvmjit<span style=color:#f92672>&gt;</span> <span style=color:#f92672>&amp;</span>ctx) <span style=color:#66d9ef>override</span> { codegen_impl(fn, ctx); }
+};
+</code></pre></div><p>Both COAT backends share the same operator implementation in <code>codegen_impl</code>.
+All other operators do the same which is why only <code>codegen_impl</code> is shown from now on.</p><p>First, we get the start value of the morsel from the first argument and reuse it as the value representing the row id of the first table.
+Next, we get the upper bound of the morsel from the second argument.
+Finally, we use <code>coat::do_while()</code> to generate a loop which will iterate as long as there are row ids left in the morsel.</p><p>The lambda is used as the loop body.
+It calls <code>codegen</code> on the next operator to insert the nested code into the loop body.
+Finally, it increments the row id of the morsel.</p><p>That&rsquo;s all there is to a <em>scan</em> operator.
+The <em>filter</em> operator is straightforward as well.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=color:#66d9ef>template</span><span style=color:#f92672>&lt;</span><span style=color:#66d9ef>class</span><span style=color:#960050;background-color:#1e0010> </span><span style=color:#a6e22e>Fn</span><span style=color:#f92672>&gt;</span>
+<span style=color:#66d9ef>void</span> codegen_impl(Fn <span style=color:#f92672>&amp;</span>fn, CodegenContext<span style=color:#f92672>&lt;</span>Fn<span style=color:#f92672>&gt;</span> <span style=color:#f92672>&amp;</span>ctx){
+	<span style=color:#75715e>// read from column, depends on column type
+</span><span style=color:#75715e></span>	<span style=color:#66d9ef>auto</span> val <span style=color:#f92672>=</span> loadValue(fn, column, ctx.rowids[relid]);
+	<span style=color:#75715e>// conditionally generate code depending on comparison type
+</span><span style=color:#75715e></span>	<span style=color:#66d9ef>switch</span>(comparison){
+		<span style=color:#66d9ef>case</span> Filter<span style=color:#f92672>::</span>Comparison<span style=color:#f92672>::</span>Less: {
+			coat<span style=color:#f92672>::</span>if_then(fn, val <span style=color:#f92672>&lt;</span> constant, [<span style=color:#f92672>&amp;</span>]{
+				next<span style=color:#f92672>-&gt;</span>codegen(fn, ctx);
+			});
+			<span style=color:#66d9ef>break</span>;
+		}
+		<span style=color:#66d9ef>case</span> Filter<span style=color:#f92672>::</span>Comparison<span style=color:#f92672>::</span>Greater: {
+			coat<span style=color:#f92672>::</span>if_then(fn, val <span style=color:#f92672>&gt;</span> constant, [<span style=color:#f92672>&amp;</span>]{
+				next<span style=color:#f92672>-&gt;</span>codegen(fn, ctx);
+			});
+			<span style=color:#66d9ef>break</span>;
+		}
+		<span style=color:#66d9ef>case</span> Filter<span style=color:#f92672>::</span>Comparison<span style=color:#f92672>::</span>Equal: {
+			coat<span style=color:#f92672>::</span>if_then(fn, val <span style=color:#f92672>==</span> constant, [<span style=color:#f92672>&amp;</span>]{
+				next<span style=color:#f92672>-&gt;</span>codegen(fn, ctx);
+			});
+			<span style=color:#66d9ef>break</span>;
+		}
+	}
+}
+</code></pre></div><p>First, we read the value from the column of the table we filter at the position of the current row id of this table.
+Next, we conditionally generate code for the different comparison types.
+For each comparison type, we call <code>coat::if_then()</code> with the corresponding condition.
+The lambda we pass is the then-branch.
+It just calls the next operator to insert the code inside the then-branch.</p><p>For reading the value, we used the helper function <code>loadValue</code>.
+It generates slightly different code to fetch the value depending on the type of the column.
+During load, columns with small values got moved to a denser 32-bit or 16-bit representation instead of the initial 64-bit.
+Thus, we have three types of columns to handle.
+More advanced compression schemes can be added as well.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=color:#66d9ef>template</span><span style=color:#f92672>&lt;</span><span style=color:#66d9ef>class</span><span style=color:#960050;background-color:#1e0010> </span><span style=color:#a6e22e>Fn</span>, <span style=color:#66d9ef>class</span><span style=color:#960050;background-color:#1e0010> </span><span style=color:#a6e22e>CC</span><span style=color:#f92672>&gt;</span>
+coat<span style=color:#f92672>::</span>Value<span style=color:#f92672>&lt;</span>CC,uint64_t<span style=color:#f92672>&gt;</span> loadValue(Fn <span style=color:#f92672>&amp;</span>fn, <span style=color:#66d9ef>const</span> column_t <span style=color:#f92672>&amp;</span>col, coat<span style=color:#f92672>::</span>Value<span style=color:#f92672>&lt;</span>CC,uint64_t<span style=color:#f92672>&gt;</span> <span style=color:#f92672>&amp;</span>idx){
+	coat<span style=color:#f92672>::</span>Value<span style=color:#f92672>&lt;</span>CC, uint64_t<span style=color:#f92672>&gt;</span> loaded(fn, <span style=color:#e6db74>&#34;loaded&#34;</span>);
+	<span style=color:#66d9ef>switch</span>(col.index()){
+		<span style=color:#66d9ef>case</span> <span style=color:#ae81ff>0</span><span style=color:#f92672>:</span> {
+			<span style=color:#66d9ef>auto</span> vr_col <span style=color:#f92672>=</span> fn.embedValue(std<span style=color:#f92672>::</span>get<span style=color:#f92672>&lt;</span>uint64_t<span style=color:#f92672>*&gt;</span>(col), <span style=color:#e6db74>&#34;col&#34;</span>);
+			<span style=color:#75715e>// fetch 64 bit value from column
+</span><span style=color:#75715e></span>			loaded <span style=color:#f92672>=</span> vr_col[idx];
+			<span style=color:#66d9ef>break</span>;
+		}
+		<span style=color:#66d9ef>case</span> <span style=color:#ae81ff>1</span><span style=color:#f92672>:</span> {
+			<span style=color:#66d9ef>auto</span> vr_col <span style=color:#f92672>=</span> fn.embedValue(std<span style=color:#f92672>::</span>get<span style=color:#f92672>&lt;</span>uint32_t<span style=color:#f92672>*&gt;</span>(col), <span style=color:#e6db74>&#34;col&#34;</span>);
+			<span style=color:#75715e>// fetch 32 bit value from column and extend to 64 bit
+</span><span style=color:#75715e></span>			loaded.widen(vr_col[idx]);
+			<span style=color:#66d9ef>break</span>;
+		}
+		<span style=color:#66d9ef>case</span> <span style=color:#ae81ff>2</span><span style=color:#f92672>:</span> {
+			<span style=color:#66d9ef>auto</span> vr_col <span style=color:#f92672>=</span> fn.embedValue(std<span style=color:#f92672>::</span>get<span style=color:#f92672>&lt;</span>uint16_t<span style=color:#f92672>*&gt;</span>(col), <span style=color:#e6db74>&#34;col&#34;</span>);
+			<span style=color:#75715e>// fetch 16 bit value from column and extend to 64 bit
+</span><span style=color:#75715e></span>			loaded.widen(vr_col[idx]);
+			<span style=color:#66d9ef>break</span>;
+		}
+
+		<span style=color:#66d9ef>default</span><span style=color:#f92672>:</span>
+			fprintf(stderr, <span style=color:#e6db74>&#34;unknown type in column_t: %lu</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, col.index());
+			abort();
+	}
+	<span style=color:#66d9ef>return</span> loaded;
+}
+</code></pre></div><p>Similarly, the <em>equi-join</em> operator is quite simple.
+Most of the things happen in the &ldquo;hash table&rdquo; which is actually a concise array table (similar to CSR for the graph people among us).</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=color:#66d9ef>template</span><span style=color:#f92672>&lt;</span><span style=color:#66d9ef>class</span><span style=color:#960050;background-color:#1e0010> </span><span style=color:#a6e22e>Fn</span><span style=color:#f92672>&gt;</span>
+<span style=color:#66d9ef>void</span> codegen_impl(Fn <span style=color:#f92672>&amp;</span>fn, CodegenContext<span style=color:#f92672>&lt;</span>Fn<span style=color:#f92672>&gt;</span> <span style=color:#f92672>&amp;</span>ctx){
+	<span style=color:#75715e>// fetch value from probed column
+</span><span style=color:#75715e></span>	<span style=color:#66d9ef>auto</span> val <span style=color:#f92672>=</span> loadValue(fn, probeColumn, ctx.rowids[probeRelation]);
+	<span style=color:#75715e>// embed pointer to hashtable in the generated code
+</span><span style=color:#75715e></span>	<span style=color:#66d9ef>auto</span> ht <span style=color:#f92672>=</span> fn.embedValue(hashtable, <span style=color:#e6db74>&#34;hashtable&#34;</span>);
+	<span style=color:#75715e>// iterate over all join partners
+</span><span style=color:#75715e></span>	ht.iterate(val, [<span style=color:#f92672>&amp;</span>](<span style=color:#66d9ef>auto</span> <span style=color:#f92672>&amp;</span>ele){
+		<span style=color:#75715e>// set rowid of joined relation
+</span><span style=color:#75715e></span>		ctx.rowids[buildRelation] <span style=color:#f92672>=</span> ele;
+		next<span style=color:#f92672>-&gt;</span>codegen(fn, ctx);
+	});
+}
+</code></pre></div><p>First, we fetch the value from the probed column.
+Next, we embed to pointer to the &ldquo;hash table&rdquo; in the generated code and get a <code>coat::Struct</code> object back, initialized with pointer address.
+The address of the pointer is stored in the generated code as an immediate value.
+<code>coat::Struct</code> is a wrapper for a pointer to a struct/class and provides access to member variables when they are <em>marked</em> in a special way.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=color:#66d9ef>template</span><span style=color:#f92672>&lt;</span><span style=color:#66d9ef>typename</span> T<span style=color:#f92672>&gt;</span>
+<span style=color:#66d9ef>class</span><span style=color:#960050;background-color:#1e0010> </span><span style=color:#a6e22e>MultiArrayTable</span> <span style=color:#66d9ef>final</span> {
+
+<span style=color:#75715e>#define MEMBERS(x) \
+</span><span style=color:#75715e>	x(T, min) \
+</span><span style=color:#75715e>	x(T, max) \
+</span><span style=color:#75715e>	x(T*, offsets) \
+</span><span style=color:#75715e>	x(T*, rows)
+</span><span style=color:#75715e></span>
+DECLARE_PRIVATE(MEMBERS)
+<span style=color:#75715e>#undef MEMBERS
+</span></code></pre></div><p>Yes, macros.
+C++ lacks compile-time reflection.
+COAT uses macros to add a bit of meta data, making the list of members and their types available to other templates like <code>coat::Struct</code>.
+This way we get access to each member from the generated code.</p><p>The heavy lifting in the <em>equi-join</em> operator is done by <code>ht.iterate()</code>.
+It is a custom function added to the wrapper object with CRTP.
+Hence, the implementation details of the &ldquo;hash table&rdquo; can be encapsulated inside its header file, even for code generation.
+As a user of the data structure, we do not have to know how to iterate over all entries with the same key.
+We use the provided convenience function.
+For details, check out the file <em>include/MultiArrayTable.h</em>.</p><p>The last operator in each pipeline is the <em>projection</em> operator.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=color:#66d9ef>template</span><span style=color:#f92672>&lt;</span><span style=color:#66d9ef>class</span><span style=color:#960050;background-color:#1e0010> </span><span style=color:#a6e22e>Fn</span><span style=color:#f92672>&gt;</span>
+<span style=color:#66d9ef>void</span> codegen_impl(Fn <span style=color:#f92672>&amp;</span>fn, CodegenContext<span style=color:#f92672>&lt;</span>Fn<span style=color:#f92672>&gt;</span> <span style=color:#f92672>&amp;</span>ctx){
+	<span style=color:#75715e>// iterate over all projected columns
+</span><span style=color:#75715e></span>	<span style=color:#66d9ef>for</span>(size_t i<span style=color:#f92672>=</span><span style=color:#ae81ff>0</span>; i<span style=color:#f92672>&lt;</span>size; <span style=color:#f92672>++</span>i){
+		<span style=color:#66d9ef>auto</span> [column, relid] <span style=color:#f92672>=</span> projections[i];
+		<span style=color:#75715e>// fetch value from projected column
+</span><span style=color:#75715e></span>		<span style=color:#66d9ef>auto</span> val <span style=color:#f92672>=</span> loadValue(fn, <span style=color:#f92672>*</span>column, ctx.rowids[relid]);
+		<span style=color:#75715e>// add value to implicit sum on the projected column
+</span><span style=color:#75715e></span>		ctx.results[i] <span style=color:#f92672>+=</span> val;
+	}
+	<span style=color:#75715e>// count number of elements in sum
+</span><span style=color:#75715e></span>	<span style=color:#f92672>++</span>ctx.amount;
+}
+</code></pre></div><p>For each projected column, we fetch the value and add it to the implicit sum on this projected column.
+Additionally, we count the number of elements we have in the sum.
+This counter is used to distinguish an empty result set from a sum which just happens to be zero.</p><p>To return the results back to the caller of the generated function, we must store the sums to memory.
+After all operators in the pipeline generated their code, the following function is called to generate an epilogue.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=color:#66d9ef>template</span><span style=color:#f92672>&lt;</span><span style=color:#66d9ef>class</span><span style=color:#960050;background-color:#1e0010> </span><span style=color:#a6e22e>Fn</span><span style=color:#f92672>&gt;</span>
+<span style=color:#66d9ef>void</span> codegen_save_impl(Fn <span style=color:#f92672>&amp;</span>fn, CodegenContext<span style=color:#f92672>&lt;</span>Fn<span style=color:#f92672>&gt;</span> <span style=color:#f92672>&amp;</span>ctx){
+	<span style=color:#75715e>// get memory location to store result tuple to from an argument
+</span><span style=color:#75715e></span>	<span style=color:#66d9ef>auto</span> <span style=color:#f92672>&amp;</span>projaddr <span style=color:#f92672>=</span> std<span style=color:#f92672>::</span>get<span style=color:#f92672>&lt;</span><span style=color:#ae81ff>2</span><span style=color:#f92672>&gt;</span>(ctx.arguments);
+	<span style=color:#75715e>// iterate over all projected columns
+</span><span style=color:#75715e></span>	<span style=color:#66d9ef>for</span>(size_t i<span style=color:#f92672>=</span><span style=color:#ae81ff>0</span>; i<span style=color:#f92672>&lt;</span>size; <span style=color:#f92672>++</span>i){
+		<span style=color:#75715e>// store sum to memory
+</span><span style=color:#75715e></span>		projaddr[i] <span style=color:#f92672>=</span> ctx.results[i];
+	}
+}
+</code></pre></div><p>It stores each sum in contiguous memory.
+The pointer was passed as an argument to the generated function.
+The counter for the number of elements in the projection is passed as return value back to the caller.</p><p>And, that&rsquo;s it!
+Code generation can be that easy.</p><h1 id=experimental-evaluation>Experimental Evaluation</h1><p>If you build the prototype and run the workload provided by the contest, you will see that the execution with the AsmJit backend is much faster than the LLVM backend.
+Compilation latency is the main difference here.
+The workload consists of a lot of short running queries which benefit from the very low compilation latency of AsmJit.
+Even disabling optimizations in LLVM does not close the gap.</p><p>In database research, the use of LLVM as JIT compiler seems to be the standard.
+JIT assemblers are usually neglected for being too hard to use and producing inefficient code.
+Furthermore, they are not portable.
+Well, COAT makes them easy to use and code efficiency is not so bad as we see by the results.
+Portability remains an issue.
+I still like to have them on the table to give me a baseline, especially a lower bound for the compilation latency.
+A JIT assembler shows me what is possible with a simple 1:1 mapping of C++ expressions to assembly instructions and how much a JIT compiler can improve on that given I invest time in optimizations.
+An unoptimized build with LLVM does not provide me with the same lower bound.</p><p>These results should be taken with a grain of salt.
+This is just a simple prototype running a single workload.
+It needs to be shown if a JIT assembler like AsmJit can be used as a viable alternative to LLVM for short running queries in a more realistic setting.
+COAT makes it easily accessible, so why not try it out.</p><h1 id=conclusion>Conclusion</h1><p>I hope this tutorial was informative and not too long.
+Code generation has a small learning curve to get into the right mindset.
+We are generating code which is executed later.
+We have to keep in mind what is run when.
+COAT helps to concentrate on the control flow of the generated code by hiding the gritty details of the compiler APIs.
+It streamlines the process to the point where code generation is not hard anymore.</p><p>In databases, more and more researchers and companies are adopting JIT compilation to squeeze more performance from the hardware.
+Now is a good time to jump in on it.</p></article><div class=pagination><a href=https://tetzank.github.io/posts/coat-edsl-for-codegen/ class="left arrow">&#8592; previous</a>
+<a href=# class=top>Top</a></div></main></div></body></html>
