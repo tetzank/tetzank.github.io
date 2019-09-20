@@ -239,7 +239,7 @@ Most of the things happen in the &ldquo;hash table&rdquo; which is actually a co
 	});
 }
 </code></pre></div><p>First, we fetch the value from the probed column.
-Next, we embed to pointer to the &ldquo;hash table&rdquo; in the generated code and get a <code>coat::Struct</code> object back, initialized with pointer address.
+Next, we embed the pointer to the &ldquo;hash table&rdquo; in the generated code and get the <code>coat::Struct</code> object <code>ht</code> back, initialized with the pointer address.
 The address of the pointer is stored in the generated code as an immediate value.
 <code>coat::Struct</code> is a wrapper for a pointer to a struct/class and provides access to member variables when they are <em>marked</em> in a special way.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=color:#66d9ef>template</span><span style=color:#f92672>&lt;</span><span style=color:#66d9ef>typename</span> T<span style=color:#f92672>&gt;</span>
 <span style=color:#66d9ef>class</span><span style=color:#960050;background-color:#1e0010> </span><span style=color:#a6e22e>MultiArrayTable</span> <span style=color:#66d9ef>final</span> {
@@ -260,7 +260,12 @@ It is a custom function added to the wrapper object with CRTP.
 Hence, the implementation details of the &ldquo;hash table&rdquo; can be encapsulated inside its header file, even for code generation.
 As a user of the data structure, we do not have to know how to iterate over all entries with the same key.
 We use the provided convenience function.
-For details, check out the file <em>include/MultiArrayTable.h</em>.</p><p>The last operator in each pipeline is the <em>projection</em> operator.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=color:#66d9ef>template</span><span style=color:#f92672>&lt;</span><span style=color:#66d9ef>class</span><span style=color:#960050;background-color:#1e0010> </span><span style=color:#a6e22e>Fn</span><span style=color:#f92672>&gt;</span>
+For details, check out the file <a href=https://github.com/tetzank/sigmod18contest/blob/master/include/MultiArrayTable.h#L56><em>include/MultiArrayTable.h</em></a>.</p><p>Just for fun, I implemented additional join variants:
+joining with a <a href=https://github.com/tetzank/sigmod18contest/blob/master/include/JoinUniqueOperator.h>unique column</a> using a simple <a href=https://github.com/tetzank/sigmod18contest/blob/master/include/ArrayTable.h#>array table</a>, and a <a href=https://github.com/tetzank/sigmod18contest/blob/master/include/SemiJoinOperator.h>semi-join</a> using a <a href=https://github.com/tetzank/sigmod18contest/blob/master/include/BitsetTable.h>bitset</a> to check if there is a join partner.
+You can see it as a form of strength reduction.
+We are replacing the generic join operator with cheaper versions if the data allows it.
+A minor speedup is the result.
+Follow the links and check out the code if you are curious.</p><p>The last operator in each pipeline is the <em>projection</em> operator.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=color:#66d9ef>template</span><span style=color:#f92672>&lt;</span><span style=color:#66d9ef>class</span><span style=color:#960050;background-color:#1e0010> </span><span style=color:#a6e22e>Fn</span><span style=color:#f92672>&gt;</span>
 <span style=color:#66d9ef>void</span> codegen_impl(Fn <span style=color:#f92672>&amp;</span>fn, CodegenContext<span style=color:#f92672>&lt;</span>Fn<span style=color:#f92672>&gt;</span> <span style=color:#f92672>&amp;</span>ctx){
 	<span style=color:#75715e>// iterate over all projected columns
 </span><span style=color:#75715e></span>	<span style=color:#66d9ef>for</span>(size_t i<span style=color:#f92672>=</span><span style=color:#ae81ff>0</span>; i<span style=color:#f92672>&lt;</span>size; <span style=color:#f92672>++</span>i){

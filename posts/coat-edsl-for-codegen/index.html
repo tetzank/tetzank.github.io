@@ -9,7 +9,7 @@ Just-in-time compilations lifts this limitation by enabling programs to generate
 In this post, I will present a header-only library providing abstract types and control flow abstractions to make code generation at runtime easier to use.</p><p><strong>Disclaimer: This project is still in its early alpha stage.</strong></p><h1 id=partial-evaluation>Partial Evaluation</h1><p>In programming language theory there is the interesting concept of partial evaluation.
 Let&rsquo;s assume that parts of the input state of a program are known at a certain point in time.
 Hence, some of the expressions and statements for which we know the inputs can be evaluated and the whole program transformed into a specialized form for this partial input.
-The specialized program ought to be faster as we already evaluated parts of its expressions.</p><p>C++ provides languages features to support this concept like constant expressions.
+The specialized program ought to be faster as we already evaluated parts of its expressions.</p><p>C++ provides language features to support this concept like constant expressions.
 Constant expressions are evaluated during compilation when all inputs are constants.
 Only their results leak to the runtime of the program.
 The point in time for the transformation is restricted to compile-time.
@@ -30,7 +30,7 @@ It follows all the syntax rules of the host language which is a big plus as deve
 Furthermore, for the untrained eye, it might be hard to distinguish which values have customized operators and therefore a different semantic than the standard operators.
 Everything has its learning curve.</p><p>The most compelling advantage for me is type-safety at compile-time.
 The EDSL is integrated and therefore compiled together with all the other source code.
-With compile-time checks, we can verify if the EDSL is well-formed.</p><h1 id=codegen-abstract-types-coat>Codegen Abstract Types (COAT)</h1><p>COAT is an EDSL for C++ which makes just-in-time code generation easier.
+With compile-time checks, we can verify that the EDSL is well-formed.</p><h1 id=codegen-abstract-types-coat>Codegen Abstract Types (COAT)</h1><p>COAT is an EDSL for C++ which makes just-in-time code generation easier.
 It provides data types and control flow abstractions to express the code we want to generate.
 In a nutshell, instead of evaluating an operator, we write equivalent instructions through the compiler API to the generated function.
 The instruction is chosen considering the types of the operands.</p><p>An example is better than a thousand words.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;cstdio&gt;</span><span style=color:#75715e>
