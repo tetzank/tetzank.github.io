@@ -297,7 +297,8 @@ The counter for the number of elements in the projection is passed as return val
 Code generation can be that easy.</p><h1 id=experimental-evaluation>Experimental Evaluation</h1><p>If you build the prototype and run the workload provided by the contest, you will see that the execution with the AsmJit backend is much faster than the LLVM backend.
 Compilation latency is the main difference here.
 The workload consists of a lot of short running queries which benefit from the very low compilation latency of AsmJit.
-Even disabling optimizations in LLVM does not close the gap.</p><p>In database research, the use of LLVM as JIT compiler seems to be the standard.
+Even disabling optimizations in LLVM does not close the gap for the compilation latency, and the execution time suffers considerably from it.</p><p>Here are some measurements from my workstation.
+Depending on your machine, you might get quite different numbers, but the trend should be similar.</p><table><thead><tr><th>Back End</th><th align=right>Compilation Latency</th><th align=right>Execution Time</th></tr></thead><tbody><tr><td>AsmJit</td><td align=right>5 ms</td><td align=right>550 ms</td></tr><tr><td>LLVM -O0</td><td align=right>341 ms</td><td align=right>768 ms</td></tr><tr><td>LLVM -O1</td><td align=right>650 ms</td><td align=right>513 ms</td></tr><tr><td>LLVM -O2</td><td align=right>663 ms</td><td align=right>521 ms</td></tr><tr><td>LLVM -O3</td><td align=right>660 ms</td><td align=right>567 ms</td></tr></tbody></table><p>In database research, the use of LLVM as JIT compiler seems to be the standard.
 JIT assemblers are usually neglected for being too hard to use and producing inefficient code.
 Furthermore, they are not portable.
 Well, COAT makes them easy to use and code efficiency is not so bad as we see by the results.

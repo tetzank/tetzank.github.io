@@ -170,7 +170,7 @@ No need for special libraries.</p><p>The disadvantage is obviously the required 
 COAT works with any modern C++ compiler.
 Furthermore, compilation latency suffers from the fact that the application has to carry the full compiler along, including the C++ frontend instantiating the template at runtime.
 In COAT, you can choose the backend, and with the AsmJit backend compilation latency is very low.</p><p>Another approach to simplify JIT compilation is <a href=https://github.com/jmmartinez/easy-just-in-time>Easy::Jit</a>.
-Similarly to ClangJIT, it relies heavily on the compiler to do the magic.
+Like ClangJIT, it relies heavily on the compiler to do the magic.
 A plugin for Clang is provided to inject an &ldquo;optimization&rdquo; pass which additionally stores LLVM IR of annotated functions in the executable.
 The LLVM IR is later used by the JIT compilation.</p><p>The API is very simple, just a single function call.
 We rely on compiler assistance which makes it easy to use but also results in a high compilation latency.</p><h1 id=conclusion>Conclusion</h1><p>The source code is available in a <a href=https://github.com/tetzank/coat.git>github repository</a>.
