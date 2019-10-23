@@ -298,6 +298,7 @@ Code generation can be that easy.</p><h1 id=experimental-evaluation>Experimental
 Compilation latency is the main difference here.
 The workload consists of a lot of short running queries which benefit from the very low compilation latency of AsmJit.
 Even disabling optimizations in LLVM does not close the gap for the compilation latency, and the execution time suffers considerably from it.</p><p>Here are some measurements from my workstation.
+These numbers are the sum for all queries in the workload.
 Depending on your machine, you might get quite different numbers, but the trend should be similar.</p><table><thead><tr><th>Back End</th><th align=right>Compilation Latency</th><th align=right>Execution Time</th></tr></thead><tbody><tr><td>AsmJit</td><td align=right>5 ms</td><td align=right>550 ms</td></tr><tr><td>LLVM -O0</td><td align=right>341 ms</td><td align=right>768 ms</td></tr><tr><td>LLVM -O1</td><td align=right>650 ms</td><td align=right>513 ms</td></tr><tr><td>LLVM -O2</td><td align=right>663 ms</td><td align=right>521 ms</td></tr><tr><td>LLVM -O3</td><td align=right>660 ms</td><td align=right>567 ms</td></tr></tbody></table><p>In database research, the use of LLVM as JIT compiler seems to be the standard.
 JIT assemblers are usually neglected for being too hard to use and producing inefficient code.
 Furthermore, they are not portable.
