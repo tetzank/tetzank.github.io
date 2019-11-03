@@ -1,4 +1,5 @@
-<!doctype html><html><head><title>X-Macros</title><link rel=stylesheet href=/css/style.css></head><body><nav class=header><div class=header-container><a href=/>Dangerous Assembly</a><div class=header-menu><a href=/index.xml>RSS</a>
+<!doctype html><html><head><title>X-Macros</title><link rel=stylesheet href=/css/style.css></head><body><nav class=header><div class=header-container><a href=/>Dangerous Assembly</a><div class=header-menu><small style=margin-right:1em;opacity:.3><a href=/poems/>Dinge</a></small>
+<a href=/index.xml>RSS</a>
 <a href=https://github.com/tetzank/>github</a>
 <a href=/publications/>publications</a>
 <a href=/about/>about</a></div></div></nav><div id=content><main><article><header><time datetime="2019-04-23 16:34:00 &#43;0200 CEST" class=catalogue-time>2019-04-23</time><h1>X-Macros</h1><div class=post-line></div></header><aside><details><summary>Contents</summary><nav id=TableOfContents><ul><li><a href=#a-macro-is-not-a-function>A Macro is not a Function</a></li><li><a href=#nested-expansions>Nested Expansions</a></li><li><a href=#more-nesting>More Nesting</a></li><li><a href=#conclusion>Conclusion</a></li></ul></nav></details></aside><p>A lot of C++ developers try to avoid preprocessor macros like the plague.
@@ -24,8 +25,8 @@ If you feel curious about other common problems, you can check out the <a href=h
 A normal function has way less surprises in store than a macro.
 The compiler is usually also better at deciding when to inline a function call.
 If need be, one can still force the compiler to inline the function call with the function attribute <code>[[gnu::always_inline]]</code>, or a similar attribute for your compiler of choice.</p><h1 id=nested-expansions>Nested Expansions</h1><p>After a macro is expanded, the whole resulting body of the macro is scanned another time for any known macros to be expanded.
-This expansion rule allows us to write nested macros, leading to so called X-macros.</p><p>The common &ldquo;Hello, World!&rdquo;-example for X-macros is an enumeration and an array holding a string representation for each element of the enum.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=color:#66d9ef>struct</span> colors {
-	<span style=color:#66d9ef>enum</span> enumeration {
+This expansion rule allows us to write nested macros, leading to so called X-macros.</p><p>The common &ldquo;Hello, World!&rdquo;-example for X-macros is an enumeration and an array holding a string representation for each element of the enum.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>colors</span> {
+	<span style=color:#66d9ef>enum</span> <span style=color:#a6e22e>enumeration</span> {
 		black, white, red, blue, green
 	};
 	<span style=color:#66d9ef>static</span> <span style=color:#66d9ef>constexpr</span> std<span style=color:#f92672>::</span>array<span style=color:#f92672>&lt;</span><span style=color:#66d9ef>const</span> <span style=color:#66d9ef>char</span><span style=color:#f92672>*</span>,<span style=color:#ae81ff>5</span><span style=color:#f92672>&gt;</span> names {
@@ -34,7 +35,7 @@ This expansion rule allows us to write nested macros, leading to so called X-mac
 };
 </code></pre></div><p>Updates to the enum requires changes to the array as well.
 It would be nice to have just one list of elements and generate the enum and array from that list.
-X-macros can help us here.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=color:#66d9ef>struct</span> colors {
+X-macros can help us here.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>colors</span> {
 	<span style=color:#75715e>// list of elements
 </span><span style=color:#75715e></span>	<span style=color:#75715e>#define COLORS \
 </span><span style=color:#75715e>		X(black)   \
@@ -44,7 +45,7 @@ X-macros can help us here.</p><div class=highlight><pre style=color:#f8f8f2;back
 </span><span style=color:#75715e>		X(green)
 </span><span style=color:#75715e></span>
 	<span style=color:#75715e>// put each element into the enum
-</span><span style=color:#75715e></span>	<span style=color:#66d9ef>enum</span> enumeration {
+</span><span style=color:#75715e></span>	<span style=color:#66d9ef>enum</span> <span style=color:#a6e22e>enumeration</span> {
 		<span style=color:#75715e>#define X(color) color,
 </span><span style=color:#75715e></span>		COLORS
 		_number_of_elements
@@ -71,7 +72,7 @@ This time, we want to generate a string representation for each element.
 We convert the macro parameter to a string literal with the preprocessing operator <code>#</code> in front of the parameter, see <a href=https://gcc.gnu.org/onlinedocs/cpp/Stringizing.html#Stringizing>Stringizing</a>.
 It will generate strings in the same order as the enum.</p><h1 id=more-nesting>More Nesting</h1><p>Undefining and redefining the macro <code>X()</code> is a bit clunky.
 Ideally, we only want the list of elements and one macro to generate all the code for us.
-Something like this:</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=color:#66d9ef>struct</span> colors {
+Something like this:</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>colors</span> {
 <span style=color:#75715e>// list of elements
 </span><span style=color:#75715e></span><span style=color:#75715e>#define COLORS(X) \
 </span><span style=color:#75715e>	X(black)      \
@@ -99,14 +100,14 @@ The definition is the following:</p><div class=highlight><pre style=color:#f8f8f
 </span><span style=color:#75715e>		ELEMENTS(ARRAY_MEMBER)                                                   \
 </span><span style=color:#75715e>	};
 </span></code></pre></div><p>During the expansion of <code>DECLARE_ENUM()</code> two nested expansions are triggered one after the other.
-First, the list of elements <code>COLORS</code> is inserted into the enum and the array, replacing ELEMENTS.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++>	<span style=color:#66d9ef>enum</span> enumeration {
+First, the list of elements <code>COLORS</code> is inserted into the enum and the array, replacing ELEMENTS.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++>	<span style=color:#66d9ef>enum</span> <span style=color:#a6e22e>enumeration</span> {
 		COLORS(ENUM_MEMBER)
 		_number_of_elements
 	};
 	<span style=color:#66d9ef>static</span> <span style=color:#66d9ef>constexpr</span> std<span style=color:#f92672>::</span>array<span style=color:#f92672>&lt;</span><span style=color:#66d9ef>const</span> <span style=color:#66d9ef>char</span><span style=color:#f92672>*</span>,_number_of_elements<span style=color:#f92672>&gt;</span> names {
 		COLORS(ARRAY_MEMBER)
 	};
-</code></pre></div><p>Next, the inserted <code>COLORS</code> is expanded in the enum, using <code>ENUM_MEMBER()</code> as the definition of X, and in the initializer list of the array, using <code>ARRAY_MEMBER()</code>.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++>	<span style=color:#66d9ef>enum</span> enumeration {
+</code></pre></div><p>Next, the inserted <code>COLORS</code> is expanded in the enum, using <code>ENUM_MEMBER()</code> as the definition of X, and in the initializer list of the array, using <code>ARRAY_MEMBER()</code>.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++>	<span style=color:#66d9ef>enum</span> <span style=color:#a6e22e>enumeration</span> {
 		ENUM_MEMBER(black)
 		ENUM_MEMBER(white)
 		ENUM_MEMBER(red)
@@ -121,7 +122,7 @@ First, the list of elements <code>COLORS</code> is inserted into the enum and th
 		ARRAY_MEMBER(blue)
 		ARRAY_MEMBER(green)
 	};
-</code></pre></div><p>Finally, <code>ENUM_MEMBER()</code> and <code>ARRAY_MEMBER()</code> are expanded on each element of the list.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++>	<span style=color:#66d9ef>enum</span> enumeration {
+</code></pre></div><p>Finally, <code>ENUM_MEMBER()</code> and <code>ARRAY_MEMBER()</code> are expanded on each element of the list.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++>	<span style=color:#66d9ef>enum</span> <span style=color:#a6e22e>enumeration</span> {
 		black,
 		white,
 		red,

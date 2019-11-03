@@ -1,4 +1,5 @@
-<!doctype html><html><head><title>Removing Unused Code</title><link rel=stylesheet href=/css/style.css></head><body><nav class=header><div class=header-container><a href=/>Dangerous Assembly</a><div class=header-menu><a href=/index.xml>RSS</a>
+<!doctype html><html><head><title>Removing Unused Code</title><link rel=stylesheet href=/css/style.css></head><body><nav class=header><div class=header-container><a href=/>Dangerous Assembly</a><div class=header-menu><small style=margin-right:1em;opacity:.3><a href=/poems/>Dinge</a></small>
+<a href=/index.xml>RSS</a>
 <a href=https://github.com/tetzank/>github</a>
 <a href=/publications/>publications</a>
 <a href=/about/>about</a></div></div></nav><div id=content><main><article><header><time datetime="2019-01-05 23:25:03 &#43;0100 CET" class=catalogue-time>2019-01-05</time><h1>Removing Unused Code</h1><div class=post-line></div></header><aside><details><summary>Contents</summary><nav id=TableOfContents><ul><li><a href=#example-program>Example Program</a></li><li><a href=#inspecting-executable>Inspecting Executable</a></li><li><a href=#internal-linkage>Internal Linkage</a></li><li><a href=#garbage-collection-with-the-linker>Garbage Collection with the Linker</a></li><li><a href=#link-time-optimization>Link-Time Optimization</a></li><li><a href=#conclusion>Conclusion</a></li></ul></nav></details></aside><p>I recently went on a little journey to get a better understanding of the linker used in C++.
@@ -55,7 +56,7 @@ Static functions are only visible inside the same .cpp-file and, therefore, have
 An unnamed namespace is also just visible inside the same .cpp-file.
 Every function or class declared inside of it has internal linkage.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=color:#66d9ef>namespace</span>{
 
-<span style=color:#66d9ef>void</span> unused(){
+<span style=color:#66d9ef>void</span> <span style=color:#a6e22e>unused</span>(){
 	puts(<span style=color:#e6db74>&#34;This is dead code which is never called.&#34;</span>);
 }
 
