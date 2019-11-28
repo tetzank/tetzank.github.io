@@ -2,7 +2,7 @@
 <a href=/index.xml>RSS</a>
 <a href=https://github.com/tetzank/>github</a>
 <a href=/publications/>publications</a>
-<a href=/about/>about</a></div></div></nav><div id=content><main><article><header><time datetime="2019-11-03 23:53:04 &#43;0100 CET" class=catalogue-time>2019-11-03</time><h1>Self-Made Karaoke</h1><div class=post-line></div></header><aside><details><summary>Contents</summary><nav id=TableOfContents><ul><li><a href=#getting-a-song>Getting A Song</a></li><li><a href=#removing-vocals-in-the-center>Removing Vocals In The Center</a></li><li><a href=#splitting-vocals-from-instruments>Splitting Vocals From Instruments</a></li><li><a href=#timed-lyrics>Timed Lyrics</a></li><li><a href=#playback-in-html5>Playback In HTML5</a></li><li><a href=#conclusion>Conclusion</a></li></ul></nav></details></aside><p>I am definitely not the singer type.
+<a href=/about/>about</a></div></div></nav><div id=content><main><article><header><time datetime="2019-11-03 23:53:04 &#43;0100 CET" class=catalogue-time>2019-11-03</time><h1>Self-Made Karaoke</h1><div class=post-line></div></header><aside><details><summary>Contents</summary><nav id=TableOfContents><ul><li><a href=#getting-a-song>Getting A Song</a></li><li><a href=#removing-vocals-in-the-center>Removing Vocals in the Center</a></li><li><a href=#splitting-vocals-from-instruments>Splitting Vocals from Instruments</a></li><li><a href=#timed-lyrics>Timed Lyrics</a></li><li><a href=#playback-in-html5>Playback in HTML5</a></li><li><a href=#conclusion>Conclusion</a></li></ul></nav></details></aside><p>I am definitely not the singer type.
 Never went to any karaoke and probably will never do.
 But for some reason I was intrigued to see, from a technical standpoint, how to create a karaoke song.
 How does one remove the vocals from a song and make the lyrics appear at the right time?
@@ -29,7 +29,7 @@ format code  extension  resolution note
 </code></pre><p>Four audio and four video formats are available, in various codecs and qualities.
 We are just interested in audio.
 Let us pick the best audio quality and store it to the file <em>song.webm</em> by using the option <code>-f</code> followed by the <em>format code</em>.</p><pre><code>$ youtube-dl -f 251 'https://www.youtube.com/watch?v=--EeaSYoH04' -o song.webm
-</code></pre><h1 id=removing-vocals-in-the-center>Removing Vocals In The Center</h1><p>A tiny tool we can use is <code>sox</code>, &ldquo;the Swiss Army knife of audio manipulation&rdquo;, as they call it themselves.
+</code></pre><h1 id=removing-vocals-in-the-center>Removing Vocals in the Center</h1><p>A tiny tool we can use is <code>sox</code>, &ldquo;the Swiss Army knife of audio manipulation&rdquo;, as they call it themselves.
 <code>sox</code> supports a lot of audio effects, and one of them, called <em>oops</em>, does exactly what we want.
 It remixes a stereo audio file to a file with two mono channels where each mono channel contains the difference between the two channels in the stereo file.
 If the vocals are in the center, they get extinguished as they are the same on the left and right channel, no difference.</p><p>There are a lot of limitations with this approach.
@@ -44,7 +44,7 @@ It is my favorite tool when it comes to transcoding of media files.</p><p>We con
 You can choose a higher bit rate if you like.</p><pre><code>$ ffmpeg -i sound.wav -c:a libopus -b:a 48k sound.webm
 </code></pre><p>The last step is optional, but it reduces the file size considerably.</p><p>Have a listen to the file!
 Any decent media player should be able to play it.
-Otherwise, drag &amp; drop it into an empty browser window to have a listen.</p><h1 id=splitting-vocals-from-instruments>Splitting Vocals From Instruments</h1><p>A different approach using artificial neural networks is used by <a href=https://github.com/deezer/spleeter>Spleeter</a>.
+Otherwise, drag &amp; drop it into an empty browser window to have a listen.</p><h1 id=splitting-vocals-from-instruments>Splitting Vocals from Instruments</h1><p>A different approach using artificial neural networks is used by <a href=https://github.com/deezer/spleeter>Spleeter</a>.
 It comes with pre-trained models for TensorFlow and is quite easy to use.
 We will use it to separate the vocals from everything else and therefore get the music without the vocals.</p><p><code>spleeter</code> converts the input file internally with <code>ffmpeg</code>.
 We do not have to do it ourselves beforehand.
@@ -66,7 +66,7 @@ The specification is still just a draft and not done yet.
 Even more problematic, browser support is lacking a lot of the more interesting features like proper time-tag support.
 Styling with CSS is also hit and miss.
 It might work with some browsers but not with others.
-Therefore, I will focus only on the basic functionality which has support in all modern browsers.</p><p>Like all web standard formats, WebVTT is a text format and can be created with any text editor.
+Therefore, I will focus only on the basic functionality which has support in all modern browsers.</p><p>Like all standard web formats, WebVTT is a text format and can be created with any text editor.
 Here is a basic example.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-webvtt data-lang=webvtt>WEBVTT
 
 00:01.000 --&gt; 00:10.000
@@ -81,18 +81,19 @@ During this timespan, it displays a text segment which can span multiple lines.
 A blank line separates two <em>cues</em> from each other.</p><p>Well then, that&rsquo;s all there is.
 Get the lyrics from the web, listen through the song and format the lyrics with timestamps accordingly.
 All you need is a text editor and some stamina to get through the tedious work.</p><p>I did it for the example song.
-You can download the file <a href=/karaoke/lyrics.vtt>here</a>.</p><h1 id=playback-in-html5>Playback In HTML5</h1><p>Unfortunately, there seems to be no way to get the audio-tag of HTML5 and WebVTT playing along nicely.
+You can download the file <a href=/karaoke/lyrics.vtt>here</a>.</p><h1 id=playback-in-html5>Playback in HTML5</h1><p>Unfortunately, there seems to be no way to get the audio-tag of HTML5 and WebVTT playing along nicely.
 It did not work in any of the browsers I tried.
-The only work around I found working consistently in all browsers was to add a video track to the audio file, resulting in a video file which works fine with the video-tag and WebVTT.</p><p>The following command create a black image file which we will use as video image.
+The only work around I found working consistently in all browsers was to add a video track to the audio file, resulting in a video file which works fine with the video-tag and WebVTT.</p><p>The following command creates a black image file which we will use as video image.
 You can use any other image.</p><pre><code>$ convert -size 640x480 xc:black black.png
 </code></pre><p>Next, we use <code>ffmpeg</code> to create a video from the image and our audio file without the vocals.</p><pre><code>$ ffmpeg -loop 1 -i black.png -i sound.webm -c:v libvpx-vp9 -c:a copy -shortest karaoke.webm
 </code></pre><p>We loop the image forever with <code>-loop 1</code>, the two input files follow.
 Then, we specify the video codec to be VP9 by using the encoder library <em>libvpx-vp9</em>.
 The audio should be just copied into the video file which we do with the option <code>-c:a copy</code>.
-Finally, we specify with <code>-shortest</code> that we want to stop encoding when one of the input ends.
+Finally, we specify with <code>-shortest</code> that we want to stop encoding when one of the inputs ends.
 This option is required as the image loops forever.</p><p>Now, we can put it all together on a website with following HTML-code.<div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-html data-lang=html>&lt;<span style=color:#f92672>video</span> <span style=color:#a6e22e>controls</span> <span style=color:#a6e22e>src</span><span style=color:#f92672>=</span><span style=color:#e6db74>&#34;karaoke.webm&#34;</span>&gt;
 	&lt;<span style=color:#f92672>track</span> <span style=color:#a6e22e>default</span> <span style=color:#a6e22e>src</span><span style=color:#f92672>=</span><span style=color:#e6db74>&#34;lyrics.vtt&#34;</span>&gt;
-&lt;/<span style=color:#f92672>video</span>&gt;</code></pre></div></p><p>You can try it out the video file below, if you have JavaScript enabled in your browser.</p><hr><p>Choose the video webm file:</p><input type=file id=files name=files[] accept=video/webm>
+&lt;/<span style=color:#f92672>video</span>&gt;</code></pre></div></p><p>You can try out the video file below, if you have JavaScript enabled in your browser.
+The lyrics file is added automatically.</p><hr><p>Choose the video webm file:</p><input type=file id=files name=files[] accept=video/webm>
 <video id=player controls>
 <track default src=/karaoke/lyrics.vtt></video>
 <script>document.getElementById('files').addEventListener('change',function(event){var file=event.target.files[0];document.getElementById('player').src=URL.createObjectURL(file);},false);</script><hr><h1 id=conclusion>Conclusion</h1><p>It was interesting fiddling around with the different tools and formats.
@@ -101,4 +102,5 @@ I hope that tools like <code>spleeter</code> improve over time with more and bet
 The same goes for the WebVTT support in the browsers.
 Only the basic functionality is usable, but it would be nice to highlight the currently sung word on a line.
 The specification of WebVTT supports it, but no browser does.</p><p>Let us hope for a brighter future where we can sing along our favorite songs not caring what our neighbors might think about it.</p></article><div class=pagination><a href=https://tetzank.github.io/posts/codegen-in-databases/ class="left arrow">&#8592; previous</a>
-<a href=# class=top>Top</a></div></main></div></body></html>
+<a href=# class=top>Top</a>
+<a href=https://tetzank.github.io/posts/structure-definitions-for-binary-files/ class="right arrow">next &#8594;</a></div></main></div></body></html>

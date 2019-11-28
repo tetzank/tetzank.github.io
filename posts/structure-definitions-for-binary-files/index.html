@@ -1,0 +1,235 @@
+<!doctype html><html><head><title>Structure Definitions for Binary Files</title><link rel=stylesheet href=/css/style.css></head><body><nav class=header><div class=header-container><a href=/>Dangerous Assembly</a><div class=header-menu><small style=margin-right:1em;opacity:.3><a href=/poems/>Dinge</a></small>
+<a href=/index.xml>RSS</a>
+<a href=https://github.com/tetzank/>github</a>
+<a href=/publications/>publications</a>
+<a href=/about/>about</a></div></div></nav><div id=content><main><article><header><time datetime="2019-11-28 21:21:04 &#43;0100 CET" class=catalogue-time>2019-11-28</time><h1>Structure Definitions for Binary Files</h1><div class=post-line></div></header><aside><details><summary>Contents</summary><nav id=TableOfContents><ul><li><a href=#using-structure-definitions>Using Structure Definitions</a></li><li><a href=#writing-your-own>Writing Your Own</a></li><li><a href=#conclusion>Conclusion</a></li></ul></nav></details></aside><p>When dealing with binary file formats, sometimes, one has to look at the raw bits and bytes with a hex editor, especially when debugging a file writer or parser.
+Reinterpreting the hex numbers to the structures and values in the file format is very tedious.
+You have to keep all the value offsets and their types in mind to come to the right conclusion.
+An advanced feature of Okteta, KDE&rsquo;s hex editor, are structure definitions which describe the data layout of the file format such that the GUI can visualize the values and structures contained in the file.</p><p>I made use of it recently when adding <code>perf</code> profiling support to a just-in-time (JIT) engine.
+The JIT engine has to dump the generated code to a file in a special format called <a href=https://github.com/torvalds/linux/blob/master/tools/perf/Documentation/jitdump-specification.txt>jitdump</a> before executing the code.
+The details of the format are not important for the context of this blog post.
+It just serves as the running example.</p><h1 id=using-structure-definitions>Using Structure Definitions</h1><p>First, we will see the structures tool in action.
+All you need is the hex editor <a href=https://kde.org/applications/utilities/org.kde.okteta>Okteta</a>, an example <a href=/files/jit-376583.dump.xz>jitdump file</a> and the <a href=https://github.com/tetzank/asmjit-utilities/tree/master/perf/jitdump-structure>structure definition</a> for file format.
+The definition consists of two files which you have to install manually, see the <a href=https://docs.kde.org/stable5/en/extragear-utils/okteta/tools-structures.html>documentation</a>.
+For me it boils down to the following two commands.</p><pre><code>$ git clone https://github.com/tetzank/asmjit-utilities
+$ mkdir -p ~/.local/share/okteta/structures/
+$ ln -s $PWD/asmjit-utilities/perf/jitdump-structure ~/.local/share/okteta/structures/
+</code></pre><p>Now you just need to download the example <a href=/files/jit-376583.dump.xz>file</a>, uncompress it and open it in Okteta.</p><pre><code>$ wget https://tetzank.github.io/files/jit-376583.dump.xz
+$ unxz jit-376583.dump.xz
+$ okteta jit-376583.dump
+</code></pre><p>In the bottom right you will see the panel of the structures tool.
+It might be empty at the moment.
+We have to enable the structure definition first.
+Click on &ldquo;<em>Settings</em>&rdquo; at the bottom of the panel and then &ldquo;<em>Structures Management</em>&rdquo;.
+Now, click the checkbox next to the <em>jitdump</em> definition.
+After applying the changes, you should see a <em>jitdump</em> entry in the structures panel.
+You can unfold the levels to see the file header and a list of records of various types.
+Here is a screenshot.</p><p><img src=/files/structures.png alt="screenshot of structures tool"></p><p>In &ldquo;<em>Settings</em>&rdquo; you can also change how numerical values are displayed, in decimal or hexadecimal.
+Furthermore, you can conveniently download new definitions from a central server.
+Unfortunately, there are not many definitions available.
+This feature seems to be a hidden gem not many people know about.</p><p>Each value can be accessed and also modified.
+It makes debugging of binary files very easy as the file is parsed for you by the hex editor.</p><h1 id=writing-your-own>Writing Your Own</h1><p>In this section we will have a look at how you can write your own structure definitions for the file formats you are interested in.
+A good start is Okteta&rsquo;s <a href=https://docs.kde.org/stable5/en/extragear-utils/okteta/tools-structures.html>documentation</a>, and KDE&rsquo;s <a href=https://userbase.kde.org/Okteta/Writing_structure_definitions>userbase wiki</a> which helped me a lot with some of the nitty details.
+I will walk you through the things I did for the jitdump definition.</p><p>A structure definition consists of two files: <code>metadata.desktop</code>, and <code>main.osd</code> or <code>main.js</code> depending which on the type of the definition.
+We will focus on the JavaScript type as it allows us to change the data layout of the structures dynamically during parsing.</p><p><strong>metadata.desktop</strong></p><p>The name, description and type of the structure definition is stored in this file.
+A <code>.desktop</code> file is pretty simple and similar to a <code>.ini</code> file.
+There is a key-value-pair per line and the section heading &ldquo;Desktop Entry&rdquo; on the first line.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-ini data-lang=ini><span style=color:#66d9ef>[Desktop Entry]</span>
+<span style=color:#a6e22e>Encoding</span><span style=color:#f92672>=</span><span style=color:#e6db74>UTF-8</span>
+<span style=color:#a6e22e>Icon</span><span style=color:#f92672>=</span><span style=color:#e6db74>application-x-executable</span>
+<span style=color:#a6e22e>Type</span><span style=color:#f92672>=</span><span style=color:#e6db74>Service</span>
+<span style=color:#a6e22e>ServiceTypes</span><span style=color:#f92672>=</span><span style=color:#e6db74>KPluginInfo</span>
+
+<span style=color:#a6e22e>Name</span><span style=color:#f92672>=</span><span style=color:#e6db74>JitDump Structure</span>
+<span style=color:#a6e22e>Comment</span><span style=color:#f92672>=</span><span style=color:#e6db74>Structure of the JitDump format for perf</span>
+
+<span style=color:#a6e22e>X-KDE-PluginInfo-Author</span><span style=color:#f92672>=</span><span style=color:#e6db74>Jane Doe</span>
+<span style=color:#a6e22e>X-KDE-PluginInfo-Email</span><span style=color:#f92672>=</span><span style=color:#e6db74>jane.doe@converge.rock</span>
+<span style=color:#a6e22e>X-KDE-PluginInfo-Name</span><span style=color:#f92672>=</span><span style=color:#e6db74>jitdump</span>
+<span style=color:#a6e22e>X-KDE-PluginInfo-Version</span><span style=color:#f92672>=</span><span style=color:#e6db74>0.1</span>
+<span style=color:#a6e22e>X-KDE-PluginInfo-Website</span><span style=color:#f92672>=</span><span style=color:#e6db74>https://github.com/tetzank/asmjit-utilities</span>
+<span style=color:#a6e22e>X-KDE-PluginInfo-Category</span><span style=color:#f92672>=</span><span style=color:#e6db74>structure/js</span>
+<span style=color:#a6e22e>X-KDE-PluginInfo-License</span><span style=color:#f92672>=</span><span style=color:#e6db74>MIT</span>
+<span style=color:#a6e22e>X-KDE-PluginInfo-EnabledByDefault</span><span style=color:#f92672>=</span><span style=color:#e6db74>false</span></code></pre></div><p>Most entries should be quite self-explanatory.
+Make sure to set <code>Name</code> and <code>Comment</code> to the right name and description of your structure definition.
+The type is set to JavaScript by <code>X-KDE-PluginInfo-Category=structure/js</code>.
+(The other option would be <code>X-KDE-PluginInfo-Category=structure</code>.)</p><p><strong>main.js</strong></p><p>The actual definition lives in this file.
+The jitdump format consists of a header data structure followed by an unspecified number of records, until the end of the file (EOF).
+The structure definition is constructed in the init function of <em>main.js</em>.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-js data-lang=js><span style=color:#66d9ef>function</span> <span style=color:#a6e22e>init</span>(){
+	<span style=color:#66d9ef>var</span> <span style=color:#a6e22e>file_header</span> <span style=color:#f92672>=</span> <span style=color:#75715e>//... snip ...
+</span><span style=color:#75715e></span>	<span style=color:#66d9ef>var</span> <span style=color:#a6e22e>record</span> <span style=color:#f92672>=</span> <span style=color:#75715e>//... snip ...
+</span><span style=color:#75715e></span>
+	<span style=color:#66d9ef>var</span> <span style=color:#a6e22e>jitdump</span> <span style=color:#f92672>=</span> <span style=color:#a6e22e>struct</span>({
+		<span style=color:#a6e22e>header</span>  <span style=color:#f92672>:</span> <span style=color:#a6e22e>file_header</span>,
+		<span style=color:#a6e22e>records</span> <span style=color:#f92672>:</span> <span style=color:#a6e22e>array</span>(<span style=color:#a6e22e>record</span>, <span style=color:#ae81ff>100</span>) <span style=color:#75715e>//FIXME: size hardcoded, no length in format, read until EOF
+</span><span style=color:#75715e></span>	});
+	<span style=color:#a6e22e>jitdump</span>.<span style=color:#a6e22e>defaultLockOffset</span> <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;
+
+	<span style=color:#66d9ef>return</span> <span style=color:#a6e22e>jitdump</span>;
+}
+</code></pre></div><p>We use the function <code>struct()</code> to define a data structure similar to C/C++.
+It has two members: header of type <code>file_header</code> and records, an array of <code>record</code> elements using the function <code>array(type, length)</code> to define it.
+The array length is hardcoded to 100 elements as I do not know a way to grow it dynamically until the end of the file.
+We still have to specify both types <code>file_header</code> and <code>record</code>.</p><p>Let us define the header structure <code>file_header</code> next.
+Here&rsquo;s the C/C++ definition.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>header</span>{
+	<span style=color:#66d9ef>uint32_t</span> magic;
+	<span style=color:#66d9ef>uint32_t</span> version;
+	<span style=color:#66d9ef>uint32_t</span> total_size;
+	<span style=color:#66d9ef>uint32_t</span> elf_mach;
+	<span style=color:#66d9ef>uint32_t</span> pad1;
+	<span style=color:#66d9ef>uint32_t</span> pid;
+	<span style=color:#66d9ef>uint64_t</span> timestamp;
+	<span style=color:#66d9ef>uint64_t</span> flags;
+};
+</code></pre></div><p>The definition is pretty straightforward.
+We use <code>struct()</code> again with all the members listed above, using pre-defined functions <code>uint32()</code> and <code>uint64()</code> to specify the integer types.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-js data-lang=js><span style=color:#66d9ef>var</span> <span style=color:#a6e22e>file_header</span> <span style=color:#f92672>=</span> <span style=color:#a6e22e>struct</span>({
+	<span style=color:#a6e22e>magic</span>      <span style=color:#f92672>:</span> <span style=color:#a6e22e>array</span>(<span style=color:#66d9ef>char</span>(), <span style=color:#ae81ff>4</span>),<span style=color:#75715e>//uint32(),
+</span><span style=color:#75715e></span>	<span style=color:#a6e22e>version</span>    <span style=color:#f92672>:</span> <span style=color:#a6e22e>uint32</span>(),
+	<span style=color:#a6e22e>total_size</span> <span style=color:#f92672>:</span> <span style=color:#a6e22e>uint32</span>(),
+	<span style=color:#a6e22e>elf_match</span>  <span style=color:#f92672>:</span> <span style=color:#a6e22e>uint32</span>(),
+	<span style=color:#a6e22e>pad1</span>       <span style=color:#f92672>:</span> <span style=color:#a6e22e>uint32</span>(),
+	<span style=color:#a6e22e>pid</span>        <span style=color:#f92672>:</span> <span style=color:#a6e22e>uint32</span>(),
+	<span style=color:#a6e22e>timestamp</span>  <span style=color:#f92672>:</span> <span style=color:#a6e22e>uint64</span>(),
+	<span style=color:#a6e22e>flags</span>      <span style=color:#f92672>:</span> <span style=color:#a6e22e>uint64</span>()
+});
+<span style=color:#a6e22e>file_header</span>.<span style=color:#a6e22e>name</span> <span style=color:#f92672>=</span> <span style=color:#e6db74>&#34;file_header&#34;</span>;
+</code></pre></div><p>Looks pretty similar to the C++ code, doesn&rsquo;t it?
+The member <em>magic</em> is either <code>'JitD'</code> or <code>'DTiJ'</code> depending on the endianness of the architecture.
+To make it display as characters, I changed the type to a fixed-size array of <code>char()</code>.</p><p>The <code>record</code> type is a bit more complicated.
+It actually represents a family of types, consisting of a common record header followed by various payloads, depending on the record type.
+Another way to look at it: a structure containing a union of payload types.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>record</span>{
+	<span style=color:#75715e>// common fields of record header
+</span><span style=color:#75715e></span>	<span style=color:#66d9ef>uint32_t</span> id;
+	...
+
+	<span style=color:#75715e>// payload, only one is active as indicated in id
+</span><span style=color:#75715e></span>	<span style=color:#66d9ef>union</span>{
+		<span style=color:#66d9ef>struct</span> { ... } record_load;
+		<span style=color:#66d9ef>struct</span> { ... } record_debug;
+		...
+	};
+};
+</code></pre></div><p>This is called a tagged union which is quite common in data formats.
+The convenience function <code>taggedUnion()</code> provides support for such structures.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-js data-lang=js><span style=color:#66d9ef>var</span> <span style=color:#a6e22e>record</span> <span style=color:#f92672>=</span> <span style=color:#a6e22e>taggedUnion</span>(
+	<span style=color:#75715e>// common fields
+</span><span style=color:#75715e></span>	<span style=color:#a6e22e>record_header</span>,
+	[ <span style=color:#75715e>// list of alternatives of union
+</span><span style=color:#75715e></span>		<span style=color:#a6e22e>record_load</span>,
+		<span style=color:#a6e22e>record_debug</span>
+	]
+);
+</code></pre></div><p>Now, we just have to define all the fields and alternatives.
+Let&rsquo;s start with the common fields: the record header.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=color:#66d9ef>enum</span> <span style=color:#a6e22e>record_type</span> <span style=color:#f92672>:</span> <span style=color:#66d9ef>uint32_t</span> {
+	JIT_CODE_LOAD           <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>, <span style=color:#75715e>// describing a jitted function
+</span><span style=color:#75715e></span>	JIT_CODE_MOVE           <span style=color:#f92672>=</span> <span style=color:#ae81ff>1</span>, <span style=color:#75715e>// already jitted function which is moved
+</span><span style=color:#75715e></span>	JIT_CODE_DEBUG_INFO     <span style=color:#f92672>=</span> <span style=color:#ae81ff>2</span>, <span style=color:#75715e>// debug info for function
+</span><span style=color:#75715e></span>	JIT_CODE_CLOSE          <span style=color:#f92672>=</span> <span style=color:#ae81ff>3</span>, <span style=color:#75715e>// end of jit runtime marker (optional)
+</span><span style=color:#75715e></span>	JIT_CODE_UNWINDING_INFO <span style=color:#f92672>=</span> <span style=color:#ae81ff>4</span>  <span style=color:#75715e>// unwinding info for a function
+</span><span style=color:#75715e></span>};
+
+<span style=color:#66d9ef>struct</span> <span style=color:#a6e22e>record_header</span>{
+	<span style=color:#66d9ef>enum</span> <span style=color:#a6e22e>record_type</span> id; <span style=color:#75715e>// record type
+</span><span style=color:#75715e></span>	<span style=color:#66d9ef>uint32_t</span> total_size; <span style=color:#75715e>// size in bytes of record including header
+</span><span style=color:#75715e></span>	<span style=color:#66d9ef>uint64_t</span> timestamp;  <span style=color:#75715e>// creation timestamp of record
+</span><span style=color:#75715e></span>};
+</code></pre></div><p>The record header consists of three fields: <code>id</code>, <code>total_size</code> and <code>timestamp</code>.
+<code>id</code> is an enum type indicating which kind of type this record is.
+To print the identifier of the enum entry, we define the enum in JavaScript as well and use the pre-defined function <code>enumeration(name, base_type, enum_type)</code>.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-js data-lang=js><span style=color:#66d9ef>var</span> <span style=color:#a6e22e>record_type</span> <span style=color:#f92672>=</span> {
+	<span style=color:#a6e22e>JIT_CODE_LOAD</span>           <span style=color:#f92672>:</span> <span style=color:#ae81ff>0</span>, <span style=color:#75715e>// describing a jitted function
+</span><span style=color:#75715e></span>	<span style=color:#a6e22e>JIT_CODE_MOVE</span>           <span style=color:#f92672>:</span> <span style=color:#ae81ff>1</span>, <span style=color:#75715e>// already jitted function which is moved
+</span><span style=color:#75715e></span>	<span style=color:#a6e22e>JIT_CODE_DEBUG_INFO</span>     <span style=color:#f92672>:</span> <span style=color:#ae81ff>2</span>, <span style=color:#75715e>// debug info for function
+</span><span style=color:#75715e></span>	<span style=color:#a6e22e>JIT_CODE_CLOSE</span>          <span style=color:#f92672>:</span> <span style=color:#ae81ff>3</span>, <span style=color:#75715e>// end of jit runtime marker (optional)
+</span><span style=color:#75715e></span>	<span style=color:#a6e22e>JIT_CODE_UNWINDING_INFO</span> <span style=color:#f92672>:</span> <span style=color:#ae81ff>4</span>  <span style=color:#75715e>// unwinding info for a function
+</span><span style=color:#75715e></span>};
+
+<span style=color:#66d9ef>var</span> <span style=color:#a6e22e>record_header</span> <span style=color:#f92672>=</span> {
+	<span style=color:#a6e22e>id</span>         <span style=color:#f92672>:</span> <span style=color:#a6e22e>enumeration</span>(<span style=color:#e6db74>&#34;record_type&#34;</span>, <span style=color:#a6e22e>uint32</span>(), <span style=color:#a6e22e>record_type</span>),
+	<span style=color:#a6e22e>total_size</span> <span style=color:#f92672>:</span> <span style=color:#a6e22e>uint32</span>(),
+	<span style=color:#a6e22e>timestamp</span>  <span style=color:#f92672>:</span> <span style=color:#a6e22e>uint64</span>()
+};
+</code></pre></div><p>We will not define all record types, only <code>JIT_CODE_LOAD</code> and <code>JIT_CODE_DEBUG_INFO</code> as they are the most important ones.
+Let us see the load record next.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-js data-lang=js><span style=color:#66d9ef>var</span> <span style=color:#a6e22e>record_load</span> <span style=color:#f92672>=</span> <span style=color:#a6e22e>alternative</span>(
+	<span style=color:#75715e>// selectIf
+</span><span style=color:#75715e></span>	<span style=color:#66d9ef>function</span>(){ <span style=color:#66d9ef>return</span> <span style=color:#66d9ef>this</span>.<span style=color:#a6e22e>wasAbleToRead</span> <span style=color:#f92672>&amp;&amp;</span> <span style=color:#66d9ef>this</span>.<span style=color:#a6e22e>id</span>.<span style=color:#a6e22e>value</span> <span style=color:#f92672>==</span> <span style=color:#a6e22e>record_type</span>.<span style=color:#a6e22e>JIT_CODE_LOAD</span>; },
+	{
+		<span style=color:#a6e22e>pid</span>           <span style=color:#f92672>:</span> <span style=color:#a6e22e>uint32</span>(),
+		<span style=color:#a6e22e>tid</span>           <span style=color:#f92672>:</span> <span style=color:#a6e22e>uint32</span>(),
+		<span style=color:#a6e22e>vma</span>           <span style=color:#f92672>:</span> <span style=color:#a6e22e>uint64</span>(),
+		<span style=color:#a6e22e>code_addr</span>     <span style=color:#f92672>:</span> <span style=color:#a6e22e>uint64</span>(),
+		<span style=color:#a6e22e>code_size</span>     <span style=color:#f92672>:</span> <span style=color:#a6e22e>uint64</span>(),
+		<span style=color:#a6e22e>code_index</span>    <span style=color:#f92672>:</span> <span style=color:#a6e22e>uint64</span>(),
+		<span style=color:#a6e22e>function_name</span> <span style=color:#f92672>:</span> <span style=color:#a6e22e>string</span>(<span style=color:#e6db74>&#34;ascii&#34;</span>).<span style=color:#a6e22e>set</span>({<span style=color:#a6e22e>terminatedBy</span> <span style=color:#f92672>:</span> <span style=color:#ae81ff>0</span>}),
+		<span style=color:#a6e22e>native_code</span>   <span style=color:#f92672>:</span> <span style=color:#a6e22e>array</span>(<span style=color:#a6e22e>uint8</span>(), <span style=color:#66d9ef>function</span>(){ <span style=color:#66d9ef>return</span> <span style=color:#66d9ef>this</span>.<span style=color:#a6e22e>parent</span>.<span style=color:#a6e22e>code_size</span>.<span style=color:#a6e22e>value</span>; })
+	},
+	<span style=color:#e6db74>&#34;record_load&#34;</span>
+);
+</code></pre></div><p>We use <code>alternate()</code> to define a union entry which takes as the first parameter a selection function.
+It checks if the entry should be active or not.
+We check with <code>this.wasAbleToRead</code> for parsing errors and then compare the value of <code>id</code> in the record header with <code>JIT_CODE_LOAD</code>.
+In this context, <code>this</code> refers to current structure under construction, which is the tagged union.
+We can access everything which is already parsed.</p><p>The load record contains a null-terminated string <code>function_name</code>.
+We define it with the function <code>string(encoding)</code> and set additionally <code>terminatedBy</code> to null.
+Immediately after the string follows the memory buffer for the generated function code.
+We use an array of bytes to represent it.
+The array size is defined in the field <code>code_size</code>.
+We pass a function to <code>array()</code> which extracts the size dynamically when the array is constructed.
+Here, <code>this</code> refers to the array we are constructing which means we have to get to the parent structure first before accessing the value of <code>code_size</code>.</p><p>Now that we know all of this, the definition of the debug info record is pretty straightforward.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-js data-lang=js><span style=color:#66d9ef>var</span> <span style=color:#a6e22e>debug_entry</span> <span style=color:#f92672>=</span> <span style=color:#a6e22e>struct</span>({
+	<span style=color:#a6e22e>code_addr</span> <span style=color:#f92672>:</span> <span style=color:#a6e22e>uint64</span>(),
+	<span style=color:#a6e22e>line</span>      <span style=color:#f92672>:</span> <span style=color:#a6e22e>uint32</span>(),
+	<span style=color:#a6e22e>discrim</span>   <span style=color:#f92672>:</span> <span style=color:#a6e22e>uint32</span>(),
+	<span style=color:#a6e22e>name</span>      <span style=color:#f92672>:</span> <span style=color:#a6e22e>string</span>(<span style=color:#e6db74>&#34;ascii&#34;</span>).<span style=color:#a6e22e>set</span>({<span style=color:#a6e22e>terminatedBy</span> <span style=color:#f92672>:</span> <span style=color:#ae81ff>0</span>})
+});
+<span style=color:#a6e22e>debug_entry</span>.<span style=color:#a6e22e>name</span> <span style=color:#f92672>=</span> <span style=color:#e6db74>&#34;debug_entry&#34;</span>;
+
+<span style=color:#66d9ef>var</span> <span style=color:#a6e22e>record_debug</span> <span style=color:#f92672>=</span> <span style=color:#a6e22e>alternative</span>(
+	<span style=color:#75715e>// selectIf
+</span><span style=color:#75715e></span>	<span style=color:#66d9ef>function</span>(){ <span style=color:#66d9ef>return</span> <span style=color:#66d9ef>this</span>.<span style=color:#a6e22e>wasAbleToRead</span> <span style=color:#f92672>&amp;&amp;</span> <span style=color:#66d9ef>this</span>.<span style=color:#a6e22e>id</span>.<span style=color:#a6e22e>value</span> <span style=color:#f92672>==</span> <span style=color:#a6e22e>record_type</span>.<span style=color:#a6e22e>JIT_CODE_DEBUG_INFO</span>; },
+	{
+		<span style=color:#a6e22e>code_addr</span> <span style=color:#f92672>:</span> <span style=color:#a6e22e>uint64</span>(),
+		<span style=color:#a6e22e>nr_entry</span>  <span style=color:#f92672>:</span> <span style=color:#a6e22e>uint64</span>(),
+		<span style=color:#a6e22e>entries</span>   <span style=color:#f92672>:</span> <span style=color:#a6e22e>array</span>(<span style=color:#a6e22e>debug_entry</span>, <span style=color:#66d9ef>function</span>(){ <span style=color:#66d9ef>return</span> <span style=color:#66d9ef>this</span>.<span style=color:#a6e22e>parent</span>.<span style=color:#a6e22e>nr_entry</span>.<span style=color:#a6e22e>value</span>; })
+	},
+	<span style=color:#e6db74>&#34;record_debug&#34;</span>
+);
+</code></pre></div><p>Arrays can also consist of aggregate types.
+We define the element type first and pass it as first parameter to <code>array(type, size)</code>.</p><p>That&rsquo;s pretty much it.
+We can make the code a bit more concise by specifying the whole record type at once with nested expressions.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-js data-lang=js><span style=color:#66d9ef>var</span> <span style=color:#a6e22e>record</span> <span style=color:#f92672>=</span> <span style=color:#a6e22e>taggedUnion</span>(
+	{ <span style=color:#75715e>// record header
+</span><span style=color:#75715e></span>		<span style=color:#a6e22e>id</span>         <span style=color:#f92672>:</span> <span style=color:#a6e22e>enumeration</span>(<span style=color:#e6db74>&#34;record_type&#34;</span>, <span style=color:#a6e22e>uint32</span>(), <span style=color:#a6e22e>record_type</span>),
+		<span style=color:#a6e22e>total_size</span> <span style=color:#f92672>:</span> <span style=color:#a6e22e>uint32</span>(),
+		<span style=color:#a6e22e>timestamp</span>  <span style=color:#f92672>:</span> <span style=color:#a6e22e>uint64</span>()
+	},
+	[ <span style=color:#75715e>// alternatives depending on record type marked in id
+</span><span style=color:#75715e></span>		<span style=color:#a6e22e>alternative</span>(
+			<span style=color:#75715e>// selectIf
+</span><span style=color:#75715e></span>			<span style=color:#66d9ef>function</span>(){ <span style=color:#66d9ef>return</span> <span style=color:#66d9ef>this</span>.<span style=color:#a6e22e>wasAbleToRead</span> <span style=color:#f92672>&amp;&amp;</span> <span style=color:#66d9ef>this</span>.<span style=color:#a6e22e>id</span>.<span style=color:#a6e22e>value</span> <span style=color:#f92672>==</span> <span style=color:#a6e22e>record_type</span>.<span style=color:#a6e22e>JIT_CODE_LOAD</span>; },
+			{
+				<span style=color:#a6e22e>pid</span>           <span style=color:#f92672>:</span> <span style=color:#a6e22e>uint32</span>(),
+				<span style=color:#a6e22e>tid</span>           <span style=color:#f92672>:</span> <span style=color:#a6e22e>uint32</span>(),
+				<span style=color:#a6e22e>vma</span>           <span style=color:#f92672>:</span> <span style=color:#a6e22e>uint64</span>(),
+				<span style=color:#a6e22e>code_addr</span>     <span style=color:#f92672>:</span> <span style=color:#a6e22e>uint64</span>(),
+				<span style=color:#a6e22e>code_size</span>     <span style=color:#f92672>:</span> <span style=color:#a6e22e>uint64</span>(),
+				<span style=color:#a6e22e>code_index</span>    <span style=color:#f92672>:</span> <span style=color:#a6e22e>uint64</span>(),
+				<span style=color:#a6e22e>function_name</span> <span style=color:#f92672>:</span> <span style=color:#a6e22e>string</span>(<span style=color:#e6db74>&#34;ascii&#34;</span>).<span style=color:#a6e22e>set</span>({<span style=color:#a6e22e>terminatedBy</span> <span style=color:#f92672>:</span> <span style=color:#ae81ff>0</span>}),
+				<span style=color:#a6e22e>native_code</span>   <span style=color:#f92672>:</span> <span style=color:#a6e22e>array</span>(<span style=color:#a6e22e>uint8</span>(), <span style=color:#66d9ef>function</span>(){ <span style=color:#66d9ef>return</span> <span style=color:#66d9ef>this</span>.<span style=color:#a6e22e>parent</span>.<span style=color:#a6e22e>code_size</span>.<span style=color:#a6e22e>value</span>; })
+			},
+			<span style=color:#e6db74>&#34;record_load&#34;</span>
+		),
+		<span style=color:#a6e22e>alternative</span>(
+			<span style=color:#75715e>// selectIf
+</span><span style=color:#75715e></span>			<span style=color:#66d9ef>function</span>(){ <span style=color:#66d9ef>return</span> <span style=color:#66d9ef>this</span>.<span style=color:#a6e22e>wasAbleToRead</span> <span style=color:#f92672>&amp;&amp;</span> <span style=color:#66d9ef>this</span>.<span style=color:#a6e22e>id</span>.<span style=color:#a6e22e>value</span> <span style=color:#f92672>==</span> <span style=color:#a6e22e>record_type</span>.<span style=color:#a6e22e>JIT_CODE_DEBUG_INFO</span>; },
+			{
+				<span style=color:#a6e22e>code_addr</span> <span style=color:#f92672>:</span> <span style=color:#a6e22e>uint64</span>(),
+				<span style=color:#a6e22e>nr_entry</span>  <span style=color:#f92672>:</span> <span style=color:#a6e22e>uint64</span>(),
+				<span style=color:#a6e22e>entries</span>   <span style=color:#f92672>:</span> <span style=color:#a6e22e>array</span>(<span style=color:#a6e22e>debug_entry</span>, <span style=color:#66d9ef>function</span>(){ <span style=color:#66d9ef>return</span> <span style=color:#66d9ef>this</span>.<span style=color:#a6e22e>parent</span>.<span style=color:#a6e22e>nr_entry</span>.<span style=color:#a6e22e>value</span>; })
+			},
+			<span style=color:#e6db74>&#34;record_debug&#34;</span>
+		),
+	]
+);
+<span style=color:#a6e22e>record</span>.<span style=color:#a6e22e>name</span> <span style=color:#f92672>=</span> <span style=color:#e6db74>&#34;record&#34;</span>;
+</code></pre></div><p>Looks kind of neat.
+And that is rare for me to say about JavaScript code&hellip;</p><h1 id=conclusion>Conclusion</h1><p>I like this tool very much.
+The definitions are easy to write and the visualization of the data layout inside the hex editor helps tremendously.
+JavaScript is definitely not my favorite language but it gets the job done.</p><p>For me, this is the fastest way to write a parser for a binary data format.
+I&rsquo;m glad to have it in my toolset.</p></article><div class=pagination><a href=https://tetzank.github.io/posts/self-made-karaoke/ class="left arrow">&#8592; previous</a>
+<a href=# class=top>Top</a></div></main></div></body></html>
