@@ -14,7 +14,7 @@ The definition consists of two files which you have to install manually, see the
 For me it boils down to the following two commands.</p><pre><code>$ git clone https://github.com/tetzank/asmjit-utilities
 $ mkdir -p ~/.local/share/okteta/structures/
 $ ln -s $PWD/asmjit-utilities/perf/jitdump-structure ~/.local/share/okteta/structures/
-</code></pre><p>Now you just need to download the example <a href=/files/jit-376583.dump.xz>file</a>, uncompress it and open it in Okteta.</p><pre><code>$ wget https://tetzank.github.io/files/jit-376583.dump.xz
+</code></pre><p>Now you just need to download the example <a href=/files/jit-376583.dump.xz>file</a>, decompress it and open it in Okteta.</p><pre><code>$ wget https://tetzank.github.io/files/jit-376583.dump.xz
 $ unxz jit-376583.dump.xz
 $ okteta jit-376583.dump
 </code></pre><p>In the bottom right you will see the panel of the structures tool.
@@ -27,7 +27,7 @@ You can unfold the levels to see the file header and a list of records of variou
 Here is a screenshot.</p><p><img src=/files/structures.png alt="screenshot of structures tool"></p><p>In &ldquo;<em>Settings</em>&rdquo; you can also change how numerical values are displayed, in decimal or hexadecimal.
 Furthermore, you can conveniently download new definitions from a central server.
 Unfortunately, there are not many definitions available.
-This feature seems to be a hidden gem not many people know about.</p><p>Each value can be accessed and also modified.
+This feature seems to be a hidden gem not many people know about.</p><p>Each value can be accessed and modified.
 It makes debugging of binary files very easy as the file is parsed for you by the hex editor.</p><h1 id=writing-your-own>Writing Your Own</h1><p>In this section we will have a look at how you can write your own structure definitions for the file formats you are interested in.
 A good start is Okteta&rsquo;s <a href=https://docs.kde.org/stable5/en/extragear-utils/okteta/tools-structures.html>documentation</a>, and KDE&rsquo;s <a href=https://userbase.kde.org/Okteta/Writing_structure_definitions>userbase wiki</a> which helped me a lot with some of the nitty details.
 I will walk you through the things I did for the jitdump definition.</p><p>A structure definition consists of two files: <code>metadata.desktop</code>, and <code>main.osd</code> or <code>main.js</code> depending which on the type of the definition.
@@ -172,7 +172,7 @@ Immediately after the string follows the memory buffer for the generated functio
 We use an array of bytes to represent it.
 The array size is defined in the field <code>code_size</code>.
 We pass a function to <code>array()</code> which extracts the size dynamically when the array is constructed.
-Here, <code>this</code> refers to the array we are constructing which means we have to get to the parent structure first before accessing the value of <code>code_size</code>.</p><p>Now that we know all of this, the definition of the debug info record is pretty straightforward.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-js data-lang=js><span style=color:#66d9ef>var</span> <span style=color:#a6e22e>debug_entry</span> <span style=color:#f92672>=</span> <span style=color:#a6e22e>struct</span>({
+Here, <code>this</code> refers to the array we are constructing which means we have to get to the parent structure first before accessing the value of <code>code_size</code>.</p><p>Now that we know all of this, the definition of the debug info record is straightforward.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-js data-lang=js><span style=color:#66d9ef>var</span> <span style=color:#a6e22e>debug_entry</span> <span style=color:#f92672>=</span> <span style=color:#a6e22e>struct</span>({
 	<span style=color:#a6e22e>code_addr</span> <span style=color:#f92672>:</span> <span style=color:#a6e22e>uint64</span>(),
 	<span style=color:#a6e22e>line</span>      <span style=color:#f92672>:</span> <span style=color:#a6e22e>uint32</span>(),
 	<span style=color:#a6e22e>discrim</span>   <span style=color:#f92672>:</span> <span style=color:#a6e22e>uint32</span>(),
@@ -230,6 +230,6 @@ We can make the code a bit more concise by specifying the whole record type at o
 </code></pre></div><p>Looks kind of neat.
 And that is rare for me to say about JavaScript code&hellip;</p><h1 id=conclusion>Conclusion</h1><p>I like this tool very much.
 The definitions are easy to write and the visualization of the data layout inside the hex editor helps tremendously.
-JavaScript is definitely not my favorite language but it gets the job done.</p><p>For me, this is the fastest way to write a parser for a binary data format.
+JavaScript is definitely not my favorite programming language, but it gets the job done and is more flexible than the XML definition.</p><p>For me, this is the fastest way to write a parser for a binary data format and get a graphical interface for free.
 I&rsquo;m glad to have it in my toolset.</p></article><div class=pagination><a href=https://tetzank.github.io/posts/self-made-karaoke/ class="left arrow">&#8592; previous</a>
 <a href=# class=top>Top</a></div></main></div></body></html>
