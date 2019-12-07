@@ -2,7 +2,7 @@
 <a href=/index.xml>RSS</a>
 <a href=https://github.com/tetzank/>github</a>
 <a href=/publications/>publications</a>
-<a href=/about/>about</a></div></div></nav><div id=content><main><article><header><time datetime="2019-09-03 23:54:52 &#43;0200 CEST" class=catalogue-time>2019-09-03</time><h1>Static Machine Code Analysis</h1><div class=post-line></div></header><aside><details><summary>Contents</summary><nav id=TableOfContents><ul><li><a href=#pipelining>Pipelining</a></li><li><a href=#execution-ports>Execution Ports</a></li><li><a href=#intel-architecture-code-analyzer>Intel Architecture Code Analyzer</a></li><li><a href=#llvm-s-machine-code-analyzer>LLVM&rsquo;s Machine Code Analyzer</a></li><li><a href=#conclusion>Conclusion</a></li></ul></nav></details></aside><p>Modern processors are complex beasts.
+<a href=/about/>about</a></div></div></nav><div id=content><main><article><header><time datetime="2019-09-03 23:54:52 &#43;0200 CEST" class=catalogue-time>2019-09-03</time><h1>Static Machine Code Analysis</h1><div class=post-line></div></header><aside><details><summary>Contents</summary><nav id=TableOfContents><ul><li><a href=#pipelining>Pipelining</a></li><li><a href=#execution-ports>Execution Ports</a></li><li><a href=#intel-architecture-code-analyzer>Intel Architecture Code Analyzer</a></li><li><a href=#llvm-s-machine-code-analyzer>LLVM&rsquo;s Machine Code Analyzer</a></li><li><a href=#conclusion>Conclusion</a></li><li><a href=#references>References</a></li></ul></nav></details></aside><p>Modern processors are complex beasts.
 They reorder instructions in an ever-increasing instruction window and speculatively execute following iterations of a loop by predicting the branch of the loop condition.
 Both features are meant to extract as much instruction parallelism from the program code as possible to feed superscalar CPUs with enough work.
 They can execute multiple instructions in a single cycle if there are no dependencies.
@@ -217,6 +217,6 @@ END
 </span><span style=color:#75715e></span>	<span style=color:#66d9ef>return</span> s;
 }</code></pre></div><p>Compilation for IACA:</p><pre><code>$ gcc -c -DIACA -DUNROLL=2 -O2 sum.c -o sum.o &amp;&amp; iaca sum.o &amp;&amp; iaca sum.o
 </code></pre><p>Compilation for LLVM-MCA:</p><pre><code>$ gcc -S -DMCA -DUNROLL=2 -O2 -masm=intel sum.c -o - | llvm-mca
-</code></pre><p>(vary the value for <code>UNROLL</code> of course)</p></article><div class=pagination><a href=https://tetzank.github.io/posts/record-and-replay/ class="left arrow">&#8592; previous</a>
+</code></pre><p>(vary the value for <code>UNROLL</code> of course)</p><h1 id=references>References</h1><ul><li><a href=https://software.intel.com/en-us/articles/intel-architecture-code-analyzer>Intel Architecture Code Analyzer</a></li><li><a href=https://llvm.org/docs/CommandGuide/llvm-mca.html>LLVM Machine Code Analyzer</a></li><li><a href=https://godbolt.org/>Compiler Explorer</a></li></ul></article><div class=pagination><a href=https://tetzank.github.io/posts/record-and-replay/ class="left arrow">&#8592; previous</a>
 <a href=# class=top>Top</a>
 <a href=https://tetzank.github.io/posts/coat-edsl-for-codegen/ class="right arrow">next &#8594;</a></div></main></div></body></html>

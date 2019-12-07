@@ -2,7 +2,7 @@
 <a href=/index.xml>RSS</a>
 <a href=https://github.com/tetzank/>github</a>
 <a href=/publications/>publications</a>
-<a href=/about/>about</a></div></div></nav><div id=content><main><article><header><time datetime="2019-09-18 15:25:08 &#43;0200 CEST" class=catalogue-time>2019-09-18</time><h1>Codegen in Databases</h1><div class=post-line></div></header><aside><details><summary>Contents</summary><nav id=TableOfContents><ul><li><a href=#sigmod-programming-contest-2018>SIGMOD Programming Contest 2018</a></li><li><a href=#data-centric-execution-pipeline>Data-centric Execution Pipeline</a></li><li><a href=#variants-of-code-generation>Variants of Code Generation</a></li><li><a href=#morsel-driven-parallelism>Morsel-Driven Parallelism</a></li><li><a href=#operator-implementations>Operator Implementations</a></li><li><a href=#experimental-evaluation>Experimental Evaluation</a></li><li><a href=#conclusion>Conclusion</a></li></ul></nav></details></aside><p>Just-in-time compilation is usually associated with managed languages like Java and C#, or scripting languages like Javascript.
+<a href=/about/>about</a></div></div></nav><div id=content><main><article><header><time datetime="2019-09-18 15:25:08 &#43;0200 CEST" class=catalogue-time>2019-09-18</time><h1>Codegen in Databases</h1><div class=post-line></div></header><aside><details><summary>Contents</summary><nav id=TableOfContents><ul><li><a href=#sigmod-programming-contest-2018>SIGMOD Programming Contest 2018</a></li><li><a href=#data-centric-execution-pipeline>Data-centric Execution Pipeline</a></li><li><a href=#variants-of-code-generation>Variants of Code Generation</a></li><li><a href=#morsel-driven-parallelism>Morsel-Driven Parallelism</a></li><li><a href=#operator-implementations>Operator Implementations</a></li><li><a href=#experimental-evaluation>Experimental Evaluation</a></li><li><a href=#conclusion>Conclusion</a></li><li><a href=#references>References</a></li></ul></nav></details></aside><p>Just-in-time compilation is usually associated with managed languages like Java and C#, or scripting languages like Javascript.
 As detailed in the previous post, many other applications benefit from ad hoc code generation as well.
 This post is a tutorial on code generation in relational databases.
 Relational databases are commonly accessed with the standard query language SQL.
@@ -98,9 +98,9 @@ Depending on the query, this can have a large negative influence on the executio
 The last variant skips most of the compiler stages by generating assembly instructions of the target microarchitecture.
 It only leverages the register allocator of the <em>back end</em> which assigns virtual registers to physical registers.
 The use of virtual registers makes the generation of nested code fragments much easier.
-Nevertheless, we are writing assembly which is a tedious and error-prone process, and not portable at all.</p><p>To make our life easier, we will use COAT, an EDSL for C++ which simplifies the implementation of code generation.
+Nevertheless, we are writing assembly which is a tedious and error-prone process, and not portable at all.</p><p>To make our life easier, we will use <a href=https://github.com/tetzank/coat>COAT</a>, an EDSL for C++ which simplifies the implementation of code generation.
 For details, see the <a href=/posts/coat-edsl-for-codegen/>previous post</a> introducing it.
-The variants b) and c) are available with COAT&rsquo;s LLVM backend, variant d) with the AsmJit backend.
+The variants b) and c) are available with COAT&rsquo;s <a href=https://llvm.org/>LLVM</a> backend, variant d) with the <a href=https://asmjit.com/>AsmJit</a> backend.
 The complexity is hidden from sight behind the EDSL.
 We reap the benefits without sacrificing the ease-of-use.</p><h1 id=morsel-driven-parallelism>Morsel-Driven Parallelism</h1><p>The parallelization scheme we will use is very simple: we partition the input of the pipeline in equal-sized batches, called morsels.
 Each morsel is independent of any other morsel and is executed in parallel without any synchronization.
@@ -316,6 +316,6 @@ We are generating code which is executed later.
 We have to keep in mind what is run when.
 COAT helps to concentrate on the control flow of the generated code by hiding the gritty details of the compiler APIs.
 It streamlines the process to the point where code generation is not hard anymore.</p><p>In databases, more and more researchers and companies are adopting JIT compilation to squeeze more performance from the hardware.
-Now is a good time to jump in on it.</p></article><div class=pagination><a href=https://tetzank.github.io/posts/coat-edsl-for-codegen/ class="left arrow">&#8592; previous</a>
+Now is a good time to jump in on it.</p><h1 id=references>References</h1><ul><li><a href=https://github.com/tetzank/sigmod18contest>Source code repository</a></li><li><a href=http://sigmod18contest.db.in.tum.de/task.shtml>Task description for SIGMOD programming contest 2018</a></li><li><a href=http://hyper-db.com/>HyPer database</a></li><li><a href=https://github.com/tetzank/coat>COAT - EDSL for code generation</a></li><li><a href=https://asmjit.com/>AsmJit library</a></li><li><a href=https://llvm.org/>LLVM compiler framework</a></li></ul></article><div class=pagination><a href=https://tetzank.github.io/posts/coat-edsl-for-codegen/ class="left arrow">&#8592; previous</a>
 <a href=# class=top>Top</a>
 <a href=https://tetzank.github.io/posts/self-made-karaoke/ class="right arrow">next &#8594;</a></div></main></div></body></html>

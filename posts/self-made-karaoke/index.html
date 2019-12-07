@@ -2,7 +2,7 @@
 <a href=/index.xml>RSS</a>
 <a href=https://github.com/tetzank/>github</a>
 <a href=/publications/>publications</a>
-<a href=/about/>about</a></div></div></nav><div id=content><main><article><header><time datetime="2019-11-03 23:53:04 &#43;0100 CET" class=catalogue-time>2019-11-03</time><h1>Self-Made Karaoke</h1><div class=post-line></div></header><aside><details><summary>Contents</summary><nav id=TableOfContents><ul><li><a href=#getting-a-song>Getting A Song</a></li><li><a href=#removing-vocals-in-the-center>Removing Vocals in the Center</a></li><li><a href=#splitting-vocals-from-instruments>Splitting Vocals from Instruments</a></li><li><a href=#timed-lyrics>Timed Lyrics</a></li><li><a href=#playback-in-html5>Playback in HTML5</a></li><li><a href=#conclusion>Conclusion</a></li></ul></nav></details></aside><p>I am definitely not the singer type.
+<a href=/about/>about</a></div></div></nav><div id=content><main><article><header><time datetime="2019-11-03 23:53:04 &#43;0100 CET" class=catalogue-time>2019-11-03</time><h1>Self-Made Karaoke</h1><div class=post-line></div></header><aside><details><summary>Contents</summary><nav id=TableOfContents><ul><li><a href=#getting-a-song>Getting A Song</a></li><li><a href=#removing-vocals-in-the-center>Removing Vocals in the Center</a></li><li><a href=#splitting-vocals-from-instruments>Splitting Vocals from Instruments</a></li><li><a href=#timed-lyrics>Timed Lyrics</a></li><li><a href=#playback-in-html5>Playback in HTML5</a></li><li><a href=#conclusion>Conclusion</a></li><li><a href=#references>References</a></li></ul></nav></details></aside><p>I am definitely not the singer type.
 Never went to any karaoke and probably will never do.
 But for some reason I was intrigued to see, from a technical standpoint, how to create a karaoke song.
 How does one remove the vocals from a song and make the lyrics appear at the right time?
@@ -29,7 +29,7 @@ format code  extension  resolution note
 </code></pre><p>Four audio and four video formats are available, in various codecs and qualities.
 We are just interested in audio.
 Let us pick the best audio quality and store it to the file <em>song.webm</em> by using the option <code>-f</code> followed by the <em>format code</em>.</p><pre><code>$ youtube-dl -f 251 'https://www.youtube.com/watch?v=--EeaSYoH04' -o song.webm
-</code></pre><h1 id=removing-vocals-in-the-center>Removing Vocals in the Center</h1><p>A tiny tool we can use is <code>sox</code>, &ldquo;the Swiss Army knife of audio manipulation&rdquo;, as they call it themselves.
+</code></pre><h1 id=removing-vocals-in-the-center>Removing Vocals in the Center</h1><p>A tiny tool we can use is <a href=http://sox.sourceforge.net/>SoX</a>, &ldquo;the Swiss Army knife of audio manipulation&rdquo;, as they call it themselves.
 <code>sox</code> supports a lot of audio effects, and one of them, called <em>oops</em>, does exactly what we want.
 It remixes a stereo audio file to a file with two mono channels where each mono channel contains the difference between the two channels in the stereo file.
 If the vocals are in the center, they get extinguished as they are the same on the left and right channel, no difference.</p><p>There are a lot of limitations with this approach.
@@ -101,6 +101,6 @@ I learned a bunch of new things.
 I hope that tools like <code>spleeter</code> improve over time with more and better training data.
 The same goes for the WebVTT support in the browsers.
 Only the basic functionality is usable, but it would be nice to highlight the currently sung word on a line.
-The specification of WebVTT supports it, but no browser does.</p><p>Let us hope for a brighter future where we can sing along our favorite songs not caring what our neighbors might think about it.</p></article><div class=pagination><a href=https://tetzank.github.io/posts/codegen-in-databases/ class="left arrow">&#8592; previous</a>
+The specification of WebVTT supports it, but no browser does.</p><p>Let us hope for a brighter future where we can sing along our favorite songs not caring what our neighbors might think about it.</p><h1 id=references>References</h1><ul><li><a href=http://sox.sourceforge.net/>SoX</a></li><li><a href=https://github.com/deezer/spleeter>Spleeter</a></li><li><a href=https://sigsep.github.io/open-unmix/>Open-Unmix</a></li><li><a href=https://w3c.github.io/webvtt/>WebVTT specification</a></li></ul></article><div class=pagination><a href=https://tetzank.github.io/posts/codegen-in-databases/ class="left arrow">&#8592; previous</a>
 <a href=# class=top>Top</a>
 <a href=https://tetzank.github.io/posts/structure-definitions-for-binary-files/ class="right arrow">next &#8594;</a></div></main></div></body></html>

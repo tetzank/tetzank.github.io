@@ -2,7 +2,7 @@
 <a href=/index.xml>RSS</a>
 <a href=https://github.com/tetzank/>github</a>
 <a href=/publications/>publications</a>
-<a href=/about/>about</a></div></div></nav><div id=content><main><article><header><time datetime="2019-06-15 21:40:00 &#43;0200 CEST" class=catalogue-time>2019-06-15</time><h1>Return Oriented Programming</h1><div class=post-line></div></header><aside><details><summary>Contents</summary><nav id=TableOfContents><ul><li><a href=#function-calls-in-x86-assembly>Function Calls in x86 Assembly</a></li><li><a href=#redirecting-control-flow>Redirecting Control Flow</a></li><li><a href=#chaining-gadgets>Chaining Gadgets</a></li><li><a href=#rop-mitigations>ROP Mitigations</a></li><li><a href=#conclusion>Conclusion</a></li></ul></nav></details></aside><p>As a C++ programmer I am well aware of memory errors such as buffer overflows and dangling pointers.
+<a href=/about/>about</a></div></div></nav><div id=content><main><article><header><time datetime="2019-06-15 21:40:00 &#43;0200 CEST" class=catalogue-time>2019-06-15</time><h1>Return Oriented Programming</h1><div class=post-line></div></header><aside><details><summary>Contents</summary><nav id=TableOfContents><ul><li><a href=#function-calls-in-x86-assembly>Function Calls in x86 Assembly</a></li><li><a href=#redirecting-control-flow>Redirecting Control Flow</a></li><li><a href=#chaining-gadgets>Chaining Gadgets</a></li><li><a href=#rop-mitigations>ROP Mitigations</a></li><li><a href=#conclusion>Conclusion</a></li><li><a href=#references>References</a></li></ul></nav></details></aside><p>As a C++ programmer I am well aware of memory errors such as buffer overflows and dangling pointers.
 There are a lot of good debugging tools available like Memcheck in Valgrind and Address Sanitizer in GCC and Clang which help identifying the root cause leading to the memory corruption.
 But memory errors are not just bugs resulting in crashes or incorrect program behavior.
 They are potentially severe security issues.
@@ -231,6 +231,6 @@ I for sure had, but according to my colleagues I might be &ldquo;special&rdquo; 
 There has to be something wrong with people looking at (dis)assembly.
 Who knows&hellip;</p><p>I think one can only grow as a programmer when one occasionally lifts the lid and has a look how things are really implemented.
 Curiosity is part of my job description as a researcher and leads to deeper understanding which I am happy to share with you.
-Until next time.</p></article><div class=pagination><a href=https://tetzank.github.io/posts/x-macros/ class="left arrow">&#8592; previous</a>
+Until next time.</p><h1 id=references>References</h1><ul><li><a href=https://en.wikipedia.org/wiki/X86_calling_conventions#List_of_x86_calling_conventions>x86 calling conventions</a></li><li><a href=https://ropemporium.com/>ROP Emporium</a></li><li><a href=https://radare.org/>Radare2</a></li><li><a href=https://software.intel.com/sites/default/files/managed/4d/2a/control-flow-enforcement-technology-preview.pdf>Intel CET</a></li><li><a href=https://clang.llvm.org/docs/SafeStack.html>Clang SafeStack</a></li></ul></article><div class=pagination><a href=https://tetzank.github.io/posts/x-macros/ class="left arrow">&#8592; previous</a>
 <a href=# class=top>Top</a>
 <a href=https://tetzank.github.io/posts/record-and-replay/ class="right arrow">next &#8594;</a></div></main></div></body></html>
