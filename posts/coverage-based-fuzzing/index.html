@@ -1,0 +1,134 @@
+<!doctype html><html><head><title>Coverage-Based Fuzzing</title><link rel=stylesheet href=/css/style.css></head><body><nav class=header><div class=header-container><a href=/>Dangerous Assembly</a><div class=header-menu><small style=margin-right:1em;opacity:.3><a href=/poems/>Dinge</a></small>
+<a href=/index.xml>RSS</a>
+<a href=https://github.com/tetzank/>github</a>
+<a href=/publications/>publications</a>
+<a href=/about/>about</a></div></div></nav><div id=content><main><article><header><time datetime="2020-02-08 12:10:24 &#43;0100 CET" class=catalogue-time>2020-02-08</time><h1>Coverage-Based Fuzzing</h1><div class=post-line></div></header><aside><details><summary>Contents</summary><nav id=TableOfContents><ul><li><a href=#hello-world-of-fuzzing>&ldquo;Hello, World!&rdquo; of Fuzzing</a></li><li><a href=#combining-fuzzing-with-sanitizers>Combining Fuzzing with Sanitizers</a></li><li><a href=#conclusion>Conclusion</a></li><li><a href=#references>References</a></li></ul></nav></details></aside><p>Software testing is important.
+Every developer knows that.
+We all try our very very best to keep up with writing tests.
+But even a good test coverage is not enough when it comes to writing secure software.
+The diversity of inputs and internal states of a program is usually too large.
+Some special cases will be forgotten.
+Fuzzing tests your software with randomly mutated input data to find bugs and crashes automatically.</p><p>Fuzzing is used extensively by security researchers when hunting for bugs which could be potentially exploited.
+Software developers should do the same by integrating fuzzing into the testsuite to find vulnerabilities early in the development cycle.
+Fuzzing is not difficult.
+Multiple open source fuzzing frameworks exist which provide a simple interface and do the heavy lifting for us.
+In this post, I will focus on <a href=http://llvm.org/docs/LibFuzzer.html>libFuzzer</a> which is integrated into clang/LLVM.</p><h1 id=hello-world-of-fuzzing>&ldquo;Hello, World!&rdquo; of Fuzzing</h1><p>Let us begin with a simple example, illustrating how easy it is to define a fuzzing target and execute the fuzzing engine.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;cstdint&gt;</span><span style=color:#75715e>
+</span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;cstddef&gt;</span><span style=color:#75715e>
+</span><span style=color:#75715e></span>
+<span style=color:#75715e>//                                    pointer to buffer and size of buffer
+</span><span style=color:#75715e></span><span style=color:#66d9ef>extern</span> <span style=color:#e6db74>&#34;C&#34;</span> <span style=color:#66d9ef>int</span> LLVMFuzzerTestOneInput(<span style=color:#66d9ef>const</span> <span style=color:#66d9ef>uint8_t</span> <span style=color:#f92672>*</span>data, size_t size) {
+	<span style=color:#66d9ef>if</span> (size <span style=color:#f92672>&gt;</span> <span style=color:#ae81ff>0</span> <span style=color:#f92672>&amp;&amp;</span> data[<span style=color:#ae81ff>0</span>] <span style=color:#f92672>==</span> <span style=color:#e6db74>&#39;H&#39;</span>){
+		<span style=color:#66d9ef>if</span> (size <span style=color:#f92672>&gt;</span> <span style=color:#ae81ff>1</span> <span style=color:#f92672>&amp;&amp;</span> data[<span style=color:#ae81ff>1</span>] <span style=color:#f92672>==</span> <span style=color:#e6db74>&#39;I&#39;</span>){
+			<span style=color:#66d9ef>if</span> (size <span style=color:#f92672>&gt;</span> <span style=color:#ae81ff>2</span> <span style=color:#f92672>&amp;&amp;</span> data[<span style=color:#ae81ff>2</span>] <span style=color:#f92672>==</span> <span style=color:#e6db74>&#39;!&#39;</span>){
+				<span style=color:#75715e>// Hurrah! Input generated to pass all checks. Let&#39;s crash!
+</span><span style=color:#75715e></span>				__builtin_trap();
+			}
+		}
+	}
+	<span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+}
+</code></pre></div><p>The example has only a single function: <code>LLVMFuzzerTestOneInput()</code>.
+We are using <code>extern &quot;C&quot;</code> to avoid name mangling of the function name.
+The function gets called by libFuzzer with a memory buffer of randomly mutated data.
+With it, we can perform tests of any functionality we want.
+Here, we just want to see if the fuzzer finds its way through a number of branches and generates input data which passes all checks.
+The innermost branch contains the statement <code>__builtin_trap()</code> which aborts the program execution in an abnormal way, similar to a failed assertion.
+It is a direct way to signal the fuzzer about a problem.
+You should prefer assertions and exceptions in normal program code.</p><p>We compile and run the fuzzing program in the following way.</p><pre><code>$ clang++ -g -fsanitize=fuzzer hi.cpp -o hi
+$ ./hi
+</code></pre><p>After only a few iterations, libFuzzer will find an input which causes the program to crash as it executes <code>__builtin_trap()</code>.
+The input data is written to a &lsquo;crash-*&rsquo; file for you to inspect and start a debugging session with.</p><p>This is just a tiny example, but it shows how coverage-based fuzzing finds its ways through branches in your program.</p><h1 id=combining-fuzzing-with-sanitizers>Combining Fuzzing with Sanitizers</h1><p>A fuzzer does not know anything about the semantics of your program.
+It relies on program crashes and on checks in your program to detect misbehavior.
+When you fuzz a piece of code, make sure you enable all available assertions.
+Additionally, sanitizers automatically intrument your code with useful checks, detecting errors as early as possible.</p><p>In the next example, we combine libFuzzer with address sanitizer (ASAN) which detects common memory errors.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;cstdint&gt;</span><span style=color:#75715e>
+</span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;cstddef&gt;</span><span style=color:#75715e>
+</span><span style=color:#75715e></span>
+<span style=color:#75715e>// function under test
+</span><span style=color:#75715e></span><span style=color:#66d9ef>bool</span> <span style=color:#a6e22e>fuzz_me</span>(<span style=color:#66d9ef>const</span> <span style=color:#66d9ef>uint8_t</span> <span style=color:#f92672>*</span>data, size_t size){
+	<span style=color:#66d9ef>return</span> size <span style=color:#f92672>&gt;=</span> <span style=color:#ae81ff>3</span>
+		<span style=color:#f92672>&amp;&amp;</span> data[<span style=color:#ae81ff>0</span>] <span style=color:#f92672>==</span> <span style=color:#e6db74>&#39;F&#39;</span>
+		<span style=color:#f92672>&amp;&amp;</span> data[<span style=color:#ae81ff>1</span>] <span style=color:#f92672>==</span> <span style=color:#e6db74>&#39;U&#39;</span>
+		<span style=color:#f92672>&amp;&amp;</span> data[<span style=color:#ae81ff>2</span>] <span style=color:#f92672>==</span> <span style=color:#e6db74>&#39;Z&#39;</span>
+		<span style=color:#f92672>&amp;&amp;</span> data[<span style=color:#ae81ff>3</span>] <span style=color:#f92672>==</span> <span style=color:#e6db74>&#39;Z&#39;</span>;
+}
+
+<span style=color:#75715e>// fuzzing target called by fuzzing engine
+</span><span style=color:#75715e></span><span style=color:#66d9ef>extern</span> <span style=color:#e6db74>&#34;C&#34;</span> <span style=color:#66d9ef>int</span> LLVMFuzzerTestOneInput(<span style=color:#66d9ef>const</span> <span style=color:#66d9ef>uint8_t</span> <span style=color:#f92672>*</span>data, size_t size){
+	fuzz_me(data, size);
+	<span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+}
+</code></pre></div><p>This time, we have a function under test, called <code>fuzz_me</code>, which checks if the passed buffer starts with the characters <code>&quot;FUZZ&quot;</code>.
+We want to search for hidden bugs in the function which is why we add a fuzzing target calling <code>fuzz_me</code>.
+Compilation is very similar to the first example.
+Next to <code>fuzzer</code>, we enable <code>address</code> in the <code>-fsanitize</code> flag.</p><pre><code>$ clang++ -g -fsanitize=fuzzer,address fuzz_me.cpp -o fuzz_me
+$ ./fuzz_me
+</code></pre><p>After a few iterations, libFuzzer finds an input which triggers an assertion added by ASAN, causing the program to terminate.
+To understand the error, we start a debugging session with the generated crash file.</p><pre><code>$ gdb --args ./fuzz_me crash-...
+(gdb) b __sanitizer::Die
+(gdb) r
+</code></pre><p>The fuzzing target is only called with the data in the crash file which caused the issue.
+We add a breakpoint on <code>__sanitizer::Die</code> which stops program execution right before termination, but after ASAN reports the error.
+This allows us to investigate the program state at the time of the error in the debugger.</p><p>The bug is a heap-buffer-overflow, reading one byte past the end of the buffer.
+<code>data[3]</code> accesses the 4<sup>th</sup> element of the buffer <code>&quot;FUZ&quot;</code> with only 3 elements.
+The size check at the beginning is wrong.</p><p>Another useful sanitizer is the undefined behavior sanitizer (UBSAN).
+It adds runtime checks to detect when the program relies on undefined behavior which is a bad sign.
+The program might work in the current environment, but will most likely misbehave when you change compiler or microarchitecture.</p><p>In the next example, we try to implement a left shift in a safe way, avoiding undefined behavior.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;cstdint&gt;</span><span style=color:#75715e>
+</span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;cstddef&gt;</span><span style=color:#75715e>
+</span><span style=color:#75715e></span>
+<span style=color:#75715e>// function under test
+</span><span style=color:#75715e></span><span style=color:#66d9ef>uint64_t</span> <span style=color:#a6e22e>safe_shift</span>(<span style=color:#66d9ef>uint64_t</span> value, <span style=color:#66d9ef>uint64_t</span> amount){
+	<span style=color:#66d9ef>if</span>(amount <span style=color:#f92672>&gt;</span> <span style=color:#ae81ff>64</span>) <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+	<span style=color:#66d9ef>return</span> value <span style=color:#f92672>&lt;&lt;</span> amount;
+}
+
+<span style=color:#75715e>// fuzzing target called by fuzzer
+</span><span style=color:#75715e></span><span style=color:#66d9ef>extern</span> <span style=color:#e6db74>&#34;C&#34;</span> <span style=color:#66d9ef>int</span> LLVMFuzzerTestOneInput(<span style=color:#66d9ef>const</span> <span style=color:#66d9ef>uint8_t</span> <span style=color:#f92672>*</span>data, size_t size){
+	<span style=color:#66d9ef>if</span>(size <span style=color:#f92672>&lt;</span> <span style=color:#66d9ef>sizeof</span>(<span style=color:#66d9ef>uint64_t</span>)<span style=color:#f92672>*</span><span style=color:#ae81ff>2</span>) <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>; <span style=color:#75715e>// need at least 16 bytes
+</span><span style=color:#75715e></span>
+	<span style=color:#66d9ef>uint64_t</span> value  <span style=color:#f92672>=</span> ((<span style=color:#66d9ef>uint64_t</span><span style=color:#f92672>*</span>)data)[<span style=color:#ae81ff>0</span>]; <span style=color:#75715e>// extract first integer
+</span><span style=color:#75715e></span>	<span style=color:#66d9ef>uint64_t</span> amount <span style=color:#f92672>=</span> ((<span style=color:#66d9ef>uint64_t</span><span style=color:#f92672>*</span>)data)[<span style=color:#ae81ff>1</span>]; <span style=color:#75715e>// extract second
+</span><span style=color:#75715e></span>	<span style=color:#66d9ef>return</span> <span style=color:#a6e22e>safe_shift</span>(value, amount);
+}
+</code></pre></div><p>We extract the two integer parameters of <code>safe_shift()</code> from the input buffer with casts.
+That&rsquo;s a bit awkward, but it gets the job done.
+The compile flags are similar as before.
+We add <code>undefined</code> to the list of sanitizers and add <code>-fno-sanitize-recover=all</code> to always terminate program execution when any sanitizer detects an error.</p><pre><code>$ clang++ -g -fsanitize=fuzzer,address,undefined -fno-sanitize-recover=all undefined.cpp -o undefined
+$ ./undefined -max_len=16
+</code></pre><p>We use <code>-max_len=16</code> to limit the size of the input buffer to 16 bytes.
+Our fuzzing target does not make any use of additional bytes.
+Avoiding useless work speeds up the fuzzing process.</p><p>Again, after a few iterations, the fuzzer finds a pair of parameters which trigger a check of UBSAN:
+&ldquo;shift exponent 64 is too large for 64-bit type &lsquo;uint64_t&rsquo;.&rdquo;
+The check in <code>safe_shift()</code> has to be <code>amount &gt;= 64</code>.</p><p>Shifting all bits from a value is already undefined behavior, e.g., shifting 32 bits left on a 32-bit value or 64 on a 64-bit value.
+Many developers expect zero as a result and are surprised that it is undefined in C++.
+The reason are divergent semantics on different microarchitectures, e.g., on x86 <code>x &lt;&lt; 64</code> would result in <code>x</code> as the shift instruction has an implicit modulus operation: <code>x &lt;&lt; (64 % 64)</code>.
+By requiring a certain behavior, C++ would impose overhead on platforms with different semantics.
+Undefined behavior is the easy way out.</p><p>Extracting parameters from the input buffer is a bit tedious.
+Fortunately, libFuzzer comes with a helper class <code>FuzzedDataProvider</code> to help with structured input.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-C++ data-lang=C++><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;cstdint&gt;</span><span style=color:#75715e>
+</span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;cstddef&gt;</span><span style=color:#75715e>
+</span><span style=color:#75715e></span>
+<span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;fuzzer/FuzzedDataProvider.h&gt;</span><span style=color:#75715e>
+</span><span style=color:#75715e></span>
+<span style=color:#75715e>// function under test
+</span><span style=color:#75715e></span><span style=color:#66d9ef>uint64_t</span> <span style=color:#a6e22e>safe_shift</span>(<span style=color:#66d9ef>uint64_t</span> value, <span style=color:#66d9ef>uint64_t</span> amount){
+	<span style=color:#66d9ef>if</span>(amount <span style=color:#f92672>&gt;</span> <span style=color:#ae81ff>64</span>) <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+	<span style=color:#66d9ef>return</span> value <span style=color:#f92672>&lt;&lt;</span> amount;
+}
+
+<span style=color:#75715e>// fuzzing target called by fuzzer
+</span><span style=color:#75715e></span><span style=color:#66d9ef>extern</span> <span style=color:#e6db74>&#34;C&#34;</span> <span style=color:#66d9ef>int</span> LLVMFuzzerTestOneInput(<span style=color:#66d9ef>const</span> <span style=color:#66d9ef>uint8_t</span> <span style=color:#f92672>*</span>data, size_t size){
+	<span style=color:#66d9ef>if</span>(size <span style=color:#f92672>&lt;</span> <span style=color:#66d9ef>sizeof</span>(<span style=color:#66d9ef>uint64_t</span>)<span style=color:#f92672>*</span><span style=color:#ae81ff>2</span>) <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>; <span style=color:#75715e>// need at least 16 bytes
+</span><span style=color:#75715e></span>
+	FuzzedDataProvider <span style=color:#a6e22e>fuzdata</span>(data, size);
+	<span style=color:#66d9ef>uint64_t</span> value  <span style=color:#f92672>=</span> fuzdata.ConsumeIntegral<span style=color:#f92672>&lt;</span><span style=color:#66d9ef>uint64_t</span><span style=color:#f92672>&gt;</span>(); <span style=color:#75715e>// first parameter
+</span><span style=color:#75715e></span>	<span style=color:#66d9ef>uint64_t</span> amount <span style=color:#f92672>=</span> fuzdata.ConsumeIntegral<span style=color:#f92672>&lt;</span><span style=color:#66d9ef>uint64_t</span><span style=color:#f92672>&gt;</span>(); <span style=color:#75715e>// second
+</span><span style=color:#75715e></span>	<span style=color:#66d9ef>return</span> <span style=color:#a6e22e>safe_shift</span>(value, amount);
+}
+</code></pre></div><p>Looks much better!
+Unfortunately, the header file <code>fuzzer/FuzzedDataProvider.h</code> might not be included in the packages of your distribution, e.g., the Arch Linux package for &ldquo;compiler-rt 9&rdquo; does not include the header file.
+Luckily, the header works stand-alone.
+You can download it from <a href=https://raw.githubusercontent.com/llvm/llvm-project/master/compiler-rt/include/fuzzer/FuzzedDataProvider.h>here</a>.</p><p>With <code>FuzzedDataProvider</code> it is quite comfortable to generate values of common types like integers and strings from the random input buffer.
+It makes our life much easier.</p><h1 id=conclusion>Conclusion</h1><p>I hope, I convinced you that writing a fuzzing target is not that hard.
+Fuzzing should become a common tool in every programmers toolset to improve the quality of the whole software ecosystem.
+For important open source projects, <a href=https://google.github.io/oss-fuzz/>OSS-Fuzz</a> from Google offers to run the fuzzing process for you.
+You just have to provide the fuzzing targets.</p><h1 id=references>References</h1><ul><li><a href=http://llvm.org/docs/LibFuzzer.html>LibFuzzer</a></li><li><a href=https://github.com/google/fuzzing/blob/master/docs>Fuzzing documentation by Google</a></li><li><a href=https://google.github.io/oss-fuzz/>OSS-Fuzz project</a></li><li><a href="https://www.youtube.com/watch?v=x0FQkAPokfE">Informative presentation about fuzzing</a></li></ul></article><div class=pagination><a href=https://tetzank.github.io/posts/structure-definitions-for-binary-files/ class="left arrow">&#8592; previous</a>
+<a href=# class=top>Top</a></div></main></div></body></html>
