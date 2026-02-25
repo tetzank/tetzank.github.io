@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="765" height="1020">
+<defs>
+<mask id="m1">
+	<rect x="0" y="0" width="100%" height="100%" fill="#aaa" fill-opacity="70%" />
+	<g fill="white">
+		<circle cx="190" cy="702" r="20"/>
+		<circle cx="300" cy="887" r="23"/>
+		<circle cx="240" cy="619" r="20"/>
+		<circle cx="56" cy="541" r="20"/>
+		<circle cx="31" cy="441" r="20"/>
+		<path d="M74,295 C73,316 80,331 98,334 117,336 161,301 169,284 177,267 185,238 167,228 150,218 75,275 74,295 Z"/>
+	</g>
+</mask>
+</defs>
+
+<rect x="0" y="0" width="100%" height="100%" fill="black"/>
+<image x="0" y="0" id="photo" width="100%" height="100%" mask="url(#m1)"
+	xlink:href="neben_garage.jpg" />
+
+
+<g fill="none" stroke="orange" stroke-width="2">
+	<circle cx="190" cy="702" r="20"/>
+	<circle cx="300" cy="887" r="23"/>
+	<circle cx="240" cy="619" r="20"/>
+	<circle cx="56" cy="541" r="20"/>
+	<circle cx="31" cy="441" r="20"/>
+	<path d="M74,295 C73,316 80,331 98,334 117,336 161,301 169,284 177,267 185,238 167,228 150,218 75,275 74,295 Z"/>
+</g>
+
+<g>
+	<text x="141" y="733" fill="black" stroke="black" stroke-width="3.5">Start</text>
+	<text x="141" y="733" fill="green" stroke="green" stroke-width="1">Start</text>
+</g>
+<g>
+	<text x="97" y="229" fill="black" stroke="black" stroke-width="3.5">Top</text>
+	<text x="97" y="229" fill="green" stroke="green" stroke-width="1">Top</text>
+</g>
+</svg>
